@@ -1,0 +1,30 @@
+spring:
+  datasource:
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 10
+
+  jpa:
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: false
+
+logging:
+  level:
+    root: WARN
+    com.kanban: INFO
+    org.springframework.security: WARN
+  file:
+    name: /var/log/kanban-backend/kanban-backend.log
+    max-size: 1GB
+    max-history: 30
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,metrics,prometheus,info
+  endpoint:
+    health:
+      show-details: when-authorized

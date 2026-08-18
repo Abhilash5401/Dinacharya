@@ -1,0 +1,98 @@
+# Compiled class files
+*.class
+
+# Log files
+*.log
+logs/
+
+# Package Files
+*.jar
+*.war
+*.nar
+*.ear
+*.zip
+*.tar.gz
+*.rar
+
+# Maven
+target/
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# IDE - IntelliJ IDEA
+.idea/
+*.iws
+*.iml
+*.ipr
+out/
+
+# IDE - Eclipse
+.classpath
+.project
+.settings/
+.metadata/
+bin/
+tmp/
+*.tmp
+*.bak
+*.swp
+*~.nib
+local.properties
+.loadpath
+.recommenders
+
+# IDE - VS Code (keep launch/tasks optional; secrets stay out)
+.vscode/*
+!.vscode/extensions.json
+*.code-workspace
+
+# Environment variables — NEVER commit real credentials
+.env
+.env.local
+.env.*.local
+!.env.example
+frontend/.env
+frontend/.env.local
+frontend/.env.*.local
+!frontend/.env.example
+
+# Frontend build artifacts
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Spring Boot
+spring-output/
+
+# Test
+**/test-output/
+*.dump
+*.dumpstream
+
+# Secrets & keys
+**/secrets/
+*.pem
+*.key
+*.p12
+*.jks
+
+# Local scratch / screenshots not part of the app
+code.html
+screen.png
