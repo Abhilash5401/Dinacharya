@@ -9,12 +9,15 @@ import com.kanban.model.entity.Team;
 import com.kanban.model.entity.User;
 import com.kanban.model.enums.TaskPriority;
 import com.kanban.model.enums.TaskStatus;
+import com.kanban.model.enums.UserRole;
 import com.kanban.repository.TeamRepository;
 import com.kanban.repository.UserRepository;
 import com.kanban.service.FileImportService;
 import com.kanban.service.TaskService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.security.crypto.password.PasswordEncoder;
+import java.time.LocalDateTime;
 import org.apache.poi.ss.usermodel.*;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.apache.poi.xwpf.usermodel.XWPFDocument;
@@ -41,6 +44,7 @@ public class FileImportServiceImpl implements FileImportService {
     private final TaskService taskService;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Override
     @Transactional
@@ -77,7 +81,7 @@ public class FileImportServiceImpl implements FileImportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
         List<TaskImportData> parsedTasks = parseAttendanceExcel(file);
-        return processImportedTasks(parsedTasks, teamId, userId);
+        return processImportedTasks(parsedTasks, teamId, userId, true);
     }
 
     @Override
@@ -223,6 +227,11 @@ public class FileImportServiceImpl implements FileImportService {
     }
 
     private TaskImportResponse processImportedTasks(List<TaskImportData> parsedTasks, UUID teamId, UUID userId) {
+        return processImportedTasks(parsedTasks, teamId, userId, false);
+    }
+
+    private TaskImportResponse processImportedTasks(List<TaskImportData> parsedTasks, UUID teamId, UUID userId,
+                                                    boolean autoCreateEmployees) {
         List<TaskResponse> importedTasks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         int successCount = 0;
@@ -252,6 +261,9 @@ public class FileImportServiceImpl implements FileImportService {
                 if (assigneeId == null && taskData.getEmployeeName() != null
                         && !taskData.getEmployeeName().isBlank()) {
                     User assignee = resolveUserByName(taskData.getEmployeeName());
+                    if (assignee == null && autoCreateEmployees) {
+                        assignee = createEmployee(taskData.getEmployeeName(), taskData.getDepartment());
+                    }
                     if (assignee != null) {
                         assigneeId = assignee.getId();
                     } else {
@@ -264,6 +276,7 @@ public class FileImportServiceImpl implements FileImportService {
                 CreateTaskRequest request = CreateTaskRequest.builder()
                         .title(taskData.getTitle())
                         .description(taskData.getDescription())
+                        .remark(taskData.getRemark())
                         .status(taskData.getStatus() != null ? taskData.getStatus() : TaskStatus.TODO)
                         .priority(taskData.getPriority() != null ? taskData.getPriority() : TaskPriority.MEDIUM)
                         .deadline(taskData.getDueDate() != null ? taskData.getDueDate().atStartOfDay() : null)
@@ -351,18 +364,18 @@ public class FileImportServiceImpl implements FileImportService {
                 continue;
             }
 
+            // Title comes from the TASK column; fall back to DESCRIPTION if TASK is empty.
             String taskText = cellText(row, cols.get("TASK"), formatter);
-            // Only create a task when there is an actual task/activity description.
-            if (taskText == null || taskText.isBlank()) {
-                continue;
+            String descriptionText = cellText(row, cols.get("DESCRIPTION"), formatter);
+            String title = (taskText != null && !taskText.isBlank()) ? taskText : descriptionText;
+            if (title == null || title.isBlank()) {
+                continue; // skip rows with no task/description
             }
 
-            String attendance = cellText(row, cols.get("ATTENDANCE"), formatter);
-            String login = cellText(row, cols.get("LOGIN"), formatter);
-            String logout = cellText(row, cols.get("LOGOUT"), formatter);
-            String hours = cellText(row, cols.get("HOURS"), formatter);
             String statusText = cellText(row, cols.get("STATUS"), formatter);
-            String remarks = cellText(row, cols.get("REMARKS"), formatter);
+            String priorityText = cellText(row, cols.get("PRIORITY"), formatter);
+            String remark = cellText(row, cols.get("REMARK"), formatter);
+            String department = cellText(row, cols.get("DEPARTMENT"), formatter);
 
             LocalDate date = null;
             if (cols.containsKey("DATE")) {
@@ -373,22 +386,61 @@ public class FileImportServiceImpl implements FileImportService {
             String employee = (rowEmployee != null && !rowEmployee.isBlank()) ? rowEmployee : sheetEmployee;
 
             TaskImportData data = TaskImportData.builder()
-                    .title(taskText.trim())
-                    .description(composeAttendanceDescription(date, attendance, login, logout, hours, remarks))
+                    .title(title.trim())
+                    .description(descriptionText)
+                    .remark(remark)
                     .status(parseStatus(statusText))
-                    .priority(TaskPriority.MEDIUM)
+                    .priority(parsePriority(priorityText))
                     .dueDate(date)
                     .employeeName(employee)
-                    .attendance(attendance)
-                    .loginTime(login)
-                    .logoutTime(logout)
-                    .hoursWorked(hours)
+                    .department(department)
                     .sheetName(sheet.getSheetName())
                     .rowNumber(r + 1)
                     .build();
 
             tasks.add(data);
         }
+    }
+
+    /** Creates a minimal employee profile from a tasksheet row (name + department). */
+    private User createEmployee(String rawName, String department) {
+        String name = rawName == null ? "" : rawName.trim();
+        if (name.isEmpty()) {
+            return null;
+        }
+        String email = buildEmployeeEmail(name);
+
+        User user = User.builder()
+                .email(email)
+                .password(passwordEncoder.encode(UUID.randomUUID().toString()))
+                .name(name)
+                .role(UserRole.MEMBER)
+                .department((department != null && !department.isBlank()) ? department.trim() : null)
+                .isActive(true)
+                .lastActive(LocalDateTime.now())
+                .build();
+
+        User saved = userRepository.save(user);
+        log.info("Auto-created employee '{}' ({}) from tasksheet import", name, email);
+        return saved;
+    }
+
+    /** Builds a unique, deterministic email from an employee name, e.g. "Akkipalli Sri Usha" -> akkipalli.sri.usha@imported.local */
+    private String buildEmployeeEmail(String name) {
+        String slug = name.toLowerCase()
+                .replaceAll("[^a-z0-9]+", ".")
+                .replaceAll("^\\.|\\.$", "");
+        if (slug.isEmpty()) {
+            slug = "employee";
+        }
+        String base = slug + "@imported.local";
+        String candidate = base;
+        int suffix = 1;
+        while (userRepository.findByEmailIgnoreCase(candidate).isPresent()) {
+            candidate = slug + suffix + "@imported.local";
+            suffix++;
+        }
+        return candidate;
     }
 
     /** Scans the first rows of a sheet to find the row that looks like a header. */
@@ -427,16 +479,19 @@ public class FileImportServiceImpl implements FileImportService {
         if (h.isEmpty()) {
             return null;
         }
+        if (h.contains("action")) return null; // ignore ACTIONS column
+        if (h.contains("employee") || h.contains("associate") || h.equals("name") || h.contains("emp name") || h.contains("staff")) return "NAME";
+        if (h.contains("depart") || h.equals("dept") || h.contains("team")) return "DEPARTMENT";
+        if (h.contains("description") || h.contains("details") || h.contains("work done")) return "DESCRIPTION";
+        if (h.contains("task") || h.contains("activity") || h.contains("assignment")) return "TASK";
         if (h.contains("date")) return "DATE";
-        if (h.contains("attend") || h.equals("present") || h.contains("presence")) return "ATTENDANCE";
-        if (h.contains("login") || h.contains("log in") || h.contains("in time") || h.contains("check in") || h.contains("check-in")) return "LOGIN";
-        if (h.contains("logout") || h.contains("log out") || h.contains("out time") || h.contains("check out") || h.contains("check-out")) return "LOGOUT";
-        if (h.contains("hour") || h.contains("duration") || h.contains("worked")) return "HOURS";
-        if (h.contains("task") || h.contains("description") || h.contains("work done") || h.contains("activity") || h.contains("assignment")) return "TASK";
-        if (h.contains("status")) return "STATUS";
-        if (h.contains("name") || h.contains("employee") || h.contains("associate")) return "NAME";
         if (h.contains("priorit")) return "PRIORITY";
-        if (h.contains("remark") || h.contains("note") || h.contains("comment")) return "REMARKS";
+        if (h.contains("status")) return "STATUS";
+        if (h.contains("remark") || h.contains("note") || h.contains("comment") || h.contains("attend") || h.equals("present") || h.contains("presence")) return "REMARK";
+        // Attendance detail columns (optional formats)
+        if (h.contains("login") || h.contains("in time") || h.contains("check in") || h.contains("check-in")) return "LOGIN";
+        if (h.contains("logout") || h.contains("out time") || h.contains("check out") || h.contains("check-out")) return "LOGOUT";
+        if (h.contains("hour") || h.contains("duration") || h.contains("worked")) return "HOURS";
         return null;
     }
 
@@ -472,18 +527,6 @@ public class FileImportServiceImpl implements FileImportService {
             return sheetName.trim();
         }
         return null;
-    }
-
-    private String composeAttendanceDescription(LocalDate date, String attendance, String login,
-                                                String logout, String hours, String remarks) {
-        List<String> parts = new ArrayList<>();
-        if (date != null) parts.add("Date: " + date);
-        if (attendance != null && !attendance.isBlank()) parts.add("Attendance: " + attendance.trim());
-        if (login != null && !login.isBlank()) parts.add("Login: " + login.trim());
-        if (logout != null && !logout.isBlank()) parts.add("Logout: " + logout.trim());
-        if (hours != null && !hours.isBlank()) parts.add("Hours: " + hours.trim());
-        if (remarks != null && !remarks.isBlank()) parts.add("Remarks: " + remarks.trim());
-        return String.join(" | ", parts);
     }
 
     private String cellText(Row row, Integer colIdx, DataFormatter formatter) {
