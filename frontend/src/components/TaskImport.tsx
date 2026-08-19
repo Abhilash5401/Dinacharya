@@ -21,6 +21,7 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
   const [showModal, setShowModal] = useState(false);
   const [importResult, setImportResult] = useState<TaskImportResponse | null>(null);
   const [dragActive, setDragActive] = useState(false);
+  const [attendanceMode, setAttendanceMode] = useState(false);
 
   const handleFileUpload = async (file: File | null) => {
     if (!file) return;
@@ -34,7 +35,11 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       return;
     }
 
-    const fileType = file.name.endsWith('.xlsx') ? 'excel' : 'word';
+    const isExcel = file.name.toLowerCase().endsWith('.xlsx');
+    // Attendance tasksheet parsing only applies to Excel files.
+    const endpoint = attendanceMode && isExcel
+      ? 'attendance'
+      : (isExcel ? 'excel' : 'word');
     setImporting(true);
     setImportResult(null);
 
@@ -43,7 +48,7 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       formData.append('file', file);
 
       const response = await apiClient.post<TaskImportResponse>(
-        `/import/tasks/${fileType}/${teamId}`,
+        `/import/tasks/${endpoint}/${teamId}`,
         formData,
         {
           headers: {
@@ -152,9 +157,22 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
             Template
           </button>
 
+          {/* Attendance format toggle */}
+          <label className="flex items-center gap-2 text-sm text-charcoal cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={attendanceMode}
+              onChange={(e) => setAttendanceMode(e.target.checked)}
+              disabled={importing}
+            />
+            Attendance tasksheet format
+          </label>
+
           {/* Info */}
           <div className="text-sm text-charcoal-muted">
-            Supported: .xlsx, .docx
+            {attendanceMode
+              ? 'Reads Date, Attendance, Login, Logout, Hours, Task, Status across all sheets'
+              : 'Supported: .xlsx, .docx'}
           </div>
         </div>
 
