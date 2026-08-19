@@ -6,10 +6,11 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.util.List;
+import java.util.UUID;
 
 public interface FileImportService {
-    TaskImportResponse importTasksFromExcel(MultipartFile file, Long teamId) throws IOException;
-    TaskImportResponse importTasksFromWord(MultipartFile file, Long teamId) throws IOException;
+    TaskImportResponse importTasksFromExcel(MultipartFile file, UUID teamId, UUID userId) throws IOException;
+    TaskImportResponse importTasksFromWord(MultipartFile file, UUID teamId, UUID userId) throws IOException;
     List<TaskImportData> parseExcelFile(MultipartFile file) throws IOException;
     List<TaskImportData> parseWordFile(MultipartFile file) throws IOException;
 }

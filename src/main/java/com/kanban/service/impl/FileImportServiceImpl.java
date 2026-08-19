@@ -31,6 +31,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -43,7 +44,7 @@ public class FileImportServiceImpl implements FileImportService {
 
     @Override
     @Transactional
-    public TaskImportResponse importTasksFromExcel(MultipartFile file, Long teamId) throws IOException {
+    public TaskImportResponse importTasksFromExcel(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Excel import for team: {}", teamId);
         
         // Verify team exists
@@ -51,12 +52,12 @@ public class FileImportServiceImpl implements FileImportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
         List<TaskImportData> parsedTasks = parseExcelFile(file);
-        return processImportedTasks(parsedTasks, teamId);
+        return processImportedTasks(parsedTasks, teamId, userId);
     }
 
     @Override
     @Transactional
-    public TaskImportResponse importTasksFromWord(MultipartFile file, Long teamId) throws IOException {
+    public TaskImportResponse importTasksFromWord(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Word import for team: {}", teamId);
         
         // Verify team exists
@@ -64,7 +65,7 @@ public class FileImportServiceImpl implements FileImportService {
                 .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
         List<TaskImportData> parsedTasks = parseWordFile(file);
-        return processImportedTasks(parsedTasks, teamId);
+        return processImportedTasks(parsedTasks, teamId, userId);
     }
 
     @Override
@@ -209,7 +210,7 @@ public class FileImportServiceImpl implements FileImportService {
         return tasks;
     }
 
-    private TaskImportResponse processImportedTasks(List<TaskImportData> parsedTasks, Long teamId) {
+    private TaskImportResponse processImportedTasks(List<TaskImportData> parsedTasks, UUID teamId, UUID userId) {
         List<TaskResponse> importedTasks = new ArrayList<>();
         List<String> errors = new ArrayList<>();
         int successCount = 0;
@@ -225,7 +226,7 @@ public class FileImportServiceImpl implements FileImportService {
                 }
 
                 // Find assignee if email provided
-                Long assigneeId = null;
+                UUID assigneeId = null;
                 if (taskData.getAssigneeEmail() != null && !taskData.getAssigneeEmail().isEmpty()) {
                     User assignee = userRepository.findByEmail(taskData.getAssigneeEmail())
                             .orElse(null);
@@ -243,13 +244,13 @@ public class FileImportServiceImpl implements FileImportService {
                         .description(taskData.getDescription())
                         .status(taskData.getStatus() != null ? taskData.getStatus() : TaskStatus.TODO)
                         .priority(taskData.getPriority() != null ? taskData.getPriority() : TaskPriority.MEDIUM)
-                        .dueDate(taskData.getDueDate())
-                        .assigneeId(assigneeId)
+                        .deadline(taskData.getDueDate() != null ? taskData.getDueDate().atStartOfDay() : null)
+                        .assignedToId(assigneeId)
                         .teamId(teamId)
                         .build();
 
                 // Create the task
-                TaskResponse createdTask = taskService.createTask(request);
+                TaskResponse createdTask = taskService.createTask(request, userId);
                 importedTasks.add(createdTask);
                 successCount++;
 
@@ -379,10 +380,10 @@ public class FileImportServiceImpl implements FileImportService {
             String normalized = priority.trim().toLowerCase();
             if (normalized.contains("low")) {
                 return TaskPriority.LOW;
-            } else if (normalized.contains("high") || normalized.contains("urgent")) {
+            } else if (normalized.contains("high") || normalized.contains("critical")) {
                 return TaskPriority.HIGH;
-            } else if (normalized.contains("critical")) {
-                return TaskPriority.CRITICAL;
+            } else if (normalized.contains("urgent")) {
+                return TaskPriority.URGENT;
             }
             return TaskPriority.MEDIUM;
         }

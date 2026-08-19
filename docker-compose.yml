@@ -60,7 +60,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: ./Backend/Dockerfile
+      dockerfile: ./Dockerfile.backend
     container_name: kanban-backend
     restart: unless-stopped
     ports:

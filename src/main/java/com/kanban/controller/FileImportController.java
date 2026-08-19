@@ -19,6 +19,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.util.UUID;
 
 @Slf4j
 @RestController
@@ -29,6 +30,7 @@ import java.io.IOException;
 public class FileImportController {
 
     private final FileImportService fileImportService;
+    private final com.kanban.security.CustomUserDetailsService userDetailsService;
 
     @PostMapping(value = "/tasks/excel/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
@@ -51,7 +53,8 @@ public class FileImportController {
             @Parameter(description = "Excel file containing tasks", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Team ID to import tasks to", required = true)
-            @PathVariable Long teamId) {
+            @PathVariable UUID teamId,
+            org.springframework.security.core.Authentication authentication) {
 
         log.info("Received Excel import request for team: {}, file: {}", teamId, file.getOriginalFilename());
 
@@ -81,7 +84,9 @@ public class FileImportController {
         }
 
         try {
-            TaskImportResponse response = fileImportService.importTasksFromExcel(file, teamId);
+            // Get authenticated user
+            var user = userDetailsService.loadUserEntityByEmail(authentication.getName());
+            TaskImportResponse response = fileImportService.importTasksFromExcel(file, teamId, user.getId());
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             log.error("Error processing Excel file: {}", e.getMessage(), e);
@@ -118,7 +123,8 @@ public class FileImportController {
             @Parameter(description = "Word file containing tasks", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Team ID to import tasks to", required = true)
-            @PathVariable Long teamId) {
+            @PathVariable UUID teamId,
+            org.springframework.security.core.Authentication authentication) {
 
         log.info("Received Word import request for team: {}, file: {}", teamId, file.getOriginalFilename());
 
@@ -148,7 +154,9 @@ public class FileImportController {
         }
 
         try {
-            TaskImportResponse response = fileImportService.importTasksFromWord(file, teamId);
+            // Get authenticated user
+            var user = userDetailsService.loadUserEntityByEmail(authentication.getName());
+            TaskImportResponse response = fileImportService.importTasksFromWord(file, teamId, user.getId());
             return ResponseEntity.ok(response);
         } catch (IOException e) {
             log.error("Error processing Word file: {}", e.getMessage(), e);
@@ -192,7 +200,7 @@ public class FileImportController {
                 "1. Table format with columns: Title, Description, Status, Priority, Due Date, Assignee Email, Team Name\n" +
                 "2. Simple format: 'Title - Description - Status - Priority - Due Date' on each line";
         info.statusValues = "TODO, IN_PROGRESS, IN_REVIEW, DONE";
-        info.priorityValues = "LOW, MEDIUM, HIGH, CRITICAL";
+        info.priorityValues = "LOW, MEDIUM, HIGH, URGENT";
         info.dateFormat = "yyyy-MM-dd, dd/MM/yyyy, or MM/dd/yyyy";
         info.requiredFields = "Title (required), Description (optional), Status (optional, defaults to TODO), " +
                 "Priority (optional, defaults to MEDIUM), Due Date (optional), Assignee Email (optional), Team Name (optional)";
