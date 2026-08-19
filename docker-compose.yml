@@ -12,12 +12,19 @@ services:
       MYSQL_USER: ${DB_USER:-kanban}
       MYSQL_PASSWORD: ${DB_PASSWORD:-12345678}
     ports:
-      - "3306:3306"
+      - "127.0.0.1:3306:3306"  # Bind to localhost only for security
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d
     networks:
       - kanban-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 512M
+        reservations:
+          memory: 256M
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_PASSWORD:-12345678}"]
       interval: 10s
@@ -30,12 +37,19 @@ services:
     container_name: kanban-redis
     restart: unless-stopped
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"  # Bind to localhost only for security
     volumes:
       - redis_data:/data
     networks:
       - kanban-network
-    command: redis-server --appendonly yes
+    command: redis-server --appendonly yes --maxmemory 256mb --maxmemory-policy allkeys-lru
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 256M
+        reservations:
+          memory: 128M
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 10s
@@ -77,8 +91,8 @@ services:
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8080
       
-      # JVM Options
-      JAVA_OPTS: "-Xms512m -Xmx1024m"
+      # JVM Options for small EC2 instances
+      JAVA_OPTS: "-Xms256m -Xmx768m -XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:+UseG1GC"
     depends_on:
       mysql:
         condition: service_healthy
@@ -86,34 +100,50 @@ services:
         condition: service_healthy
     networks:
       - kanban-network
+    deploy:
+      resources:
+        limits:
+          cpus: '1.0'
+          memory: 1G
+        reservations:
+          memory: 512M
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/api/v1/actuator/health"]
       interval: 30s
       timeout: 10s
       retries: 3
-      start_period: 60s
+      start_period: 90s
 
   # React Frontend
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-/api/v1}
     container_name: kanban-frontend
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
-    environment:
-      VITE_API_URL: ${VITE_API_URL:-http://localhost:8080/api/v1}
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     networks:
       - kanban-network
+    deploy:
+      resources:
+        limits:
+          cpus: '0.25'
+          memory: 128M
+        reservations:
+          memory: 64M
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost/"]
       interval: 30s
       timeout: 3s
       retries: 3
+      start_period: 10s
 
 volumes:
   mysql_data:

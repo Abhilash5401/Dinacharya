@@ -12,14 +12,18 @@ RUN npm ci
 # Copy source code
 COPY . .
 
-# Build using npx to bypass permission issues
+# Accept build-time API URL argument  
+ARG VITE_API_URL=/api/v1
+ENV VITE_API_URL=$VITE_API_URL
+
+# Build the application
 RUN npm run build
 
 # Production stage with Nginx
 FROM nginx:alpine
 
-# Install curl for healthcheck
-RUN apk add --no-cache curl
+# Install wget for healthcheck (lighter than curl)
+RUN apk add --no-cache wget
 
 # Copy custom nginx config
 COPY nginx.conf /etc/nginx/conf.d/default.conf
@@ -32,7 +36,7 @@ EXPOSE 80
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost/ || exit 1
+  CMD wget --no-verbose --tries=1 --spider http://localhost/ || exit 1
 
 # Start Nginx
 CMD ["nginx", "-g", "daemon off;"]
