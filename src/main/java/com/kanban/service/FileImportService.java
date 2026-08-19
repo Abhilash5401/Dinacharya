@@ -11,6 +11,14 @@ import java.util.UUID;
 public interface FileImportService {
     TaskImportResponse importTasksFromExcel(MultipartFile file, UUID teamId, UUID userId) throws IOException;
     TaskImportResponse importTasksFromWord(MultipartFile file, UUID teamId, UUID userId) throws IOException;
+
+    /**
+     * Import from a daily attendance / tasksheet workbook (multi-sheet, one sheet per employee).
+     * Uses header detection to map columns like Date, Attendance, Login, Logout, Hours, Task, Status.
+     */
+    TaskImportResponse importAttendanceSheet(MultipartFile file, UUID teamId, UUID userId) throws IOException;
+
     List<TaskImportData> parseExcelFile(MultipartFile file) throws IOException;
     List<TaskImportData> parseWordFile(MultipartFile file) throws IOException;
+    List<TaskImportData> parseAttendanceExcel(MultipartFile file) throws IOException;
 }

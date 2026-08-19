@@ -23,7 +23,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/api/v1/import")
+@RequestMapping("/import")
 @RequiredArgsConstructor
 @Tag(name = "File Import", description = "Endpoints for importing tasks from Excel and Word files")
 @SecurityRequirement(name = "bearerAuth")

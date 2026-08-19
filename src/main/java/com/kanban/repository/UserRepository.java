@@ -21,6 +21,11 @@ public interface UserRepository extends JpaRepository<User, UUID> {
 
     Optional<User> findByEmailIgnoreCase(String email);
 
+    Optional<User> findByNameIgnoreCase(String name);
+
+    @Query("SELECT u FROM User u WHERE LOWER(u.name) LIKE LOWER(CONCAT('%', :name, '%'))")
+    List<User> searchByNameContaining(@Param("name") String name);
+
     Page<User> findByRole(UserRole role, Pageable pageable);
 
     @Query("""
