@@ -69,6 +69,18 @@ public class FileImportServiceImpl implements FileImportService {
     }
 
     @Override
+    @Transactional
+    public TaskImportResponse importAttendanceSheet(MultipartFile file, UUID teamId, UUID userId) throws IOException {
+        log.info("Starting attendance tasksheet import for team: {}", teamId);
+
+        teamRepository.findById(teamId)
+                .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
+
+        List<TaskImportData> parsedTasks = parseAttendanceExcel(file);
+        return processImportedTasks(parsedTasks, teamId, userId);
+    }
+
+    @Override
     public List<TaskImportData> parseExcelFile(MultipartFile file) throws IOException {
         List<TaskImportData> tasks = new ArrayList<>();
         
@@ -225,16 +237,26 @@ public class FileImportServiceImpl implements FileImportService {
                     continue;
                 }
 
-                // Find assignee if email provided
+                // Find assignee: prefer email, then fall back to employee name (attendance sheets)
                 UUID assigneeId = null;
                 if (taskData.getAssigneeEmail() != null && !taskData.getAssigneeEmail().isEmpty()) {
-                    User assignee = userRepository.findByEmail(taskData.getAssigneeEmail())
+                    User assignee = userRepository.findByEmailIgnoreCase(taskData.getAssigneeEmail())
                             .orElse(null);
                     if (assignee != null) {
                         assigneeId = assignee.getId();
                     } else {
-                        log.warn("Row {}: Assignee with email {} not found", 
+                        log.warn("Row {}: Assignee with email {} not found",
                                 taskData.getRowNumber(), taskData.getAssigneeEmail());
+                    }
+                }
+                if (assigneeId == null && taskData.getEmployeeName() != null
+                        && !taskData.getEmployeeName().isBlank()) {
+                    User assignee = resolveUserByName(taskData.getEmployeeName());
+                    if (assignee != null) {
+                        assigneeId = assignee.getId();
+                    } else {
+                        log.warn("Row {}: Employee '{}' not matched to any user",
+                                taskData.getRowNumber(), taskData.getEmployeeName());
                     }
                 }
 
@@ -273,6 +295,231 @@ public class FileImportServiceImpl implements FileImportService {
                 .importedTasks(importedTasks)
                 .message(message)
                 .build();
+    }
+
+    // ==========================================================================
+    // Attendance / daily tasksheet parsing (multi-sheet, header-driven)
+    // ==========================================================================
+
+    @Override
+    public List<TaskImportData> parseAttendanceExcel(MultipartFile file) throws IOException {
+        List<TaskImportData> tasks = new ArrayList<>();
+
+        try (Workbook workbook = new XSSFWorkbook(file.getInputStream())) {
+            DataFormatter formatter = new DataFormatter();
+            int sheetCount = workbook.getNumberOfSheets();
+
+            for (int s = 0; s < sheetCount; s++) {
+                Sheet sheet = workbook.getSheetAt(s);
+                if (sheet == null) {
+                    continue;
+                }
+                try {
+                    parseAttendanceSheet(sheet, formatter, tasks);
+                } catch (Exception e) {
+                    log.warn("Skipping sheet '{}' due to parse error: {}", sheet.getSheetName(), e.getMessage());
+                }
+            }
+        }
+
+        log.info("Parsed {} task rows from attendance workbook", tasks.size());
+        return tasks;
+    }
+
+    private void parseAttendanceSheet(Sheet sheet, DataFormatter formatter, List<TaskImportData> tasks) {
+        int headerRowIdx = findHeaderRow(sheet, formatter);
+        if (headerRowIdx < 0) {
+            log.info("No recognizable header row in sheet '{}' — skipping", sheet.getSheetName());
+            return;
+        }
+
+        Row headerRow = sheet.getRow(headerRowIdx);
+        java.util.Map<String, Integer> cols = new java.util.HashMap<>();
+        for (int c = headerRow.getFirstCellNum(); c < headerRow.getLastCellNum(); c++) {
+            String header = formatter.formatCellValue(headerRow.getCell(c));
+            String key = classifyHeader(header);
+            if (key != null && !cols.containsKey(key)) {
+                cols.put(key, c);
+            }
+        }
+
+        String sheetEmployee = detectSheetEmployeeName(sheet, formatter, headerRowIdx, cols);
+
+        for (int r = headerRowIdx + 1; r <= sheet.getLastRowNum(); r++) {
+            Row row = sheet.getRow(r);
+            if (row == null || isRowEmpty(row)) {
+                continue;
+            }
+
+            String taskText = cellText(row, cols.get("TASK"), formatter);
+            // Only create a task when there is an actual task/activity description.
+            if (taskText == null || taskText.isBlank()) {
+                continue;
+            }
+
+            String attendance = cellText(row, cols.get("ATTENDANCE"), formatter);
+            String login = cellText(row, cols.get("LOGIN"), formatter);
+            String logout = cellText(row, cols.get("LOGOUT"), formatter);
+            String hours = cellText(row, cols.get("HOURS"), formatter);
+            String statusText = cellText(row, cols.get("STATUS"), formatter);
+            String remarks = cellText(row, cols.get("REMARKS"), formatter);
+
+            LocalDate date = null;
+            if (cols.containsKey("DATE")) {
+                date = getCellValueAsDate(row.getCell(cols.get("DATE")));
+            }
+
+            String rowEmployee = cellText(row, cols.get("NAME"), formatter);
+            String employee = (rowEmployee != null && !rowEmployee.isBlank()) ? rowEmployee : sheetEmployee;
+
+            TaskImportData data = TaskImportData.builder()
+                    .title(taskText.trim())
+                    .description(composeAttendanceDescription(date, attendance, login, logout, hours, remarks))
+                    .status(parseStatus(statusText))
+                    .priority(TaskPriority.MEDIUM)
+                    .dueDate(date)
+                    .employeeName(employee)
+                    .attendance(attendance)
+                    .loginTime(login)
+                    .logoutTime(logout)
+                    .hoursWorked(hours)
+                    .sheetName(sheet.getSheetName())
+                    .rowNumber(r + 1)
+                    .build();
+
+            tasks.add(data);
+        }
+    }
+
+    /** Scans the first rows of a sheet to find the row that looks like a header. */
+    private int findHeaderRow(Sheet sheet, DataFormatter formatter) {
+        int scanLimit = Math.min(sheet.getLastRowNum(), 15);
+        int bestRow = -1;
+        int bestScore = 0;
+
+        for (int r = sheet.getFirstRowNum(); r <= scanLimit; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) {
+                continue;
+            }
+            java.util.Set<String> keys = new java.util.HashSet<>();
+            for (int c = row.getFirstCellNum(); c < row.getLastCellNum(); c++) {
+                String key = classifyHeader(formatter.formatCellValue(row.getCell(c)));
+                if (key != null) {
+                    keys.add(key);
+                }
+            }
+            // A header must have a TASK column plus at least one other known column.
+            if (keys.contains("TASK") && keys.size() >= 2 && keys.size() > bestScore) {
+                bestScore = keys.size();
+                bestRow = r;
+            }
+        }
+        return bestRow;
+    }
+
+    /** Maps a header cell's text to a canonical column key, or null if unrecognized. */
+    private String classifyHeader(String raw) {
+        if (raw == null) {
+            return null;
+        }
+        String h = raw.trim().toLowerCase();
+        if (h.isEmpty()) {
+            return null;
+        }
+        if (h.contains("date")) return "DATE";
+        if (h.contains("attend") || h.equals("present") || h.contains("presence")) return "ATTENDANCE";
+        if (h.contains("login") || h.contains("log in") || h.contains("in time") || h.contains("check in") || h.contains("check-in")) return "LOGIN";
+        if (h.contains("logout") || h.contains("log out") || h.contains("out time") || h.contains("check out") || h.contains("check-out")) return "LOGOUT";
+        if (h.contains("hour") || h.contains("duration") || h.contains("worked")) return "HOURS";
+        if (h.contains("task") || h.contains("description") || h.contains("work done") || h.contains("activity") || h.contains("assignment")) return "TASK";
+        if (h.contains("status")) return "STATUS";
+        if (h.contains("name") || h.contains("employee") || h.contains("associate")) return "NAME";
+        if (h.contains("priorit")) return "PRIORITY";
+        if (h.contains("remark") || h.contains("note") || h.contains("comment")) return "REMARKS";
+        return null;
+    }
+
+    /** Tries to find the employee name from a NAME column value above the header, a labelled cell, or the sheet tab. */
+    private String detectSheetEmployeeName(Sheet sheet, DataFormatter formatter, int headerRowIdx,
+                                           java.util.Map<String, Integer> cols) {
+        // Look for a "Name: X" style label in the rows above the header
+        for (int r = sheet.getFirstRowNum(); r < headerRowIdx; r++) {
+            Row row = sheet.getRow(r);
+            if (row == null) {
+                continue;
+            }
+            for (int c = row.getFirstCellNum(); c < row.getLastCellNum(); c++) {
+                String text = formatter.formatCellValue(row.getCell(c));
+                if (text == null) {
+                    continue;
+                }
+                String t = text.trim();
+                if (t.toLowerCase().startsWith("name") && t.contains(":")) {
+                    String candidate = t.substring(t.indexOf(':') + 1).trim();
+                    if (!candidate.isEmpty()) {
+                        return candidate;
+                    }
+                }
+                if (t.toUpperCase().startsWith("ASE ") && t.length() > 4) {
+                    return t;
+                }
+            }
+        }
+        // Fall back to the sheet tab name if it is not generic
+        String sheetName = sheet.getSheetName();
+        if (sheetName != null && !sheetName.matches("(?i)sheet\\d+")) {
+            return sheetName.trim();
+        }
+        return null;
+    }
+
+    private String composeAttendanceDescription(LocalDate date, String attendance, String login,
+                                                String logout, String hours, String remarks) {
+        List<String> parts = new ArrayList<>();
+        if (date != null) parts.add("Date: " + date);
+        if (attendance != null && !attendance.isBlank()) parts.add("Attendance: " + attendance.trim());
+        if (login != null && !login.isBlank()) parts.add("Login: " + login.trim());
+        if (logout != null && !logout.isBlank()) parts.add("Logout: " + logout.trim());
+        if (hours != null && !hours.isBlank()) parts.add("Hours: " + hours.trim());
+        if (remarks != null && !remarks.isBlank()) parts.add("Remarks: " + remarks.trim());
+        return String.join(" | ", parts);
+    }
+
+    private String cellText(Row row, Integer colIdx, DataFormatter formatter) {
+        if (colIdx == null || row == null) {
+            return null;
+        }
+        Cell cell = row.getCell(colIdx);
+        if (cell == null) {
+            return null;
+        }
+        String v = formatter.formatCellValue(cell);
+        return v == null ? null : v.trim();
+    }
+
+    private User resolveUserByName(String rawName) {
+        if (rawName == null) {
+            return null;
+        }
+        String name = rawName.trim().replaceFirst("(?i)^name\\s*[:\\-]\\s*", "").trim();
+        if (name.isEmpty()) {
+            return null;
+        }
+        String cleaned = name.replaceFirst("(?i)^ASE\\s+", "").trim();
+
+        User user = userRepository.findByNameIgnoreCase(name).orElse(null);
+        if (user == null && !cleaned.equalsIgnoreCase(name)) {
+            user = userRepository.findByNameIgnoreCase(cleaned).orElse(null);
+        }
+        if (user == null) {
+            String query = cleaned.isEmpty() ? name : cleaned;
+            List<User> matches = userRepository.searchByNameContaining(query);
+            if (matches.size() == 1) {
+                user = matches.get(0);
+            }
+        }
+        return user;
     }
 
     private String getCellValueAsString(Cell cell) {

@@ -101,6 +101,67 @@ public class FileImportController {
         }
     }
 
+    @PostMapping(value = "/tasks/attendance/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
+    @Operation(
+            summary = "Import tasks from a daily attendance/tasksheet workbook",
+            description = "Upload a multi-sheet Excel (.xlsx) attendance tasksheet. Each sheet is scanned for a header " +
+                    "row and columns are mapped by name (Date, Attendance, Login, Logout, Hours, Task/Description, Status). " +
+                    "The employee is resolved from a Name column, a 'Name:' label, or the sheet tab name.",
+            responses = {
+                    @ApiResponse(
+                            responseCode = "200",
+                            description = "Tasks imported successfully",
+                            content = @Content(schema = @Schema(implementation = TaskImportResponse.class))
+                    ),
+                    @ApiResponse(responseCode = "400", description = "Invalid file format"),
+                    @ApiResponse(responseCode = "404", description = "Team not found"),
+                    @ApiResponse(responseCode = "401", description = "Unauthorized")
+            }
+    )
+    public ResponseEntity<TaskImportResponse> importFromAttendanceSheet(
+            @Parameter(description = "Attendance tasksheet Excel file", required = true)
+            @RequestParam("file") MultipartFile file,
+            @Parameter(description = "Team ID to import tasks to", required = true)
+            @PathVariable UUID teamId,
+            org.springframework.security.core.Authentication authentication) {
+
+        log.info("Received attendance import request for team: {}, file: {}", teamId, file.getOriginalFilename());
+
+        if (file.isEmpty()) {
+            return ResponseEntity.badRequest().body(
+                    TaskImportResponse.builder()
+                            .message("File is empty")
+                            .totalRows(0).successCount(0).failureCount(0)
+                            .build()
+            );
+        }
+
+        String filename = file.getOriginalFilename();
+        if (filename == null || !filename.toLowerCase().endsWith(".xlsx")) {
+            return ResponseEntity.badRequest().body(
+                    TaskImportResponse.builder()
+                            .message("Invalid file type. Only .xlsx files are supported")
+                            .totalRows(0).successCount(0).failureCount(0)
+                            .build()
+            );
+        }
+
+        try {
+            var user = userDetailsService.loadUserEntityByEmail(authentication.getName());
+            TaskImportResponse response = fileImportService.importAttendanceSheet(file, teamId, user.getId());
+            return ResponseEntity.ok(response);
+        } catch (IOException e) {
+            log.error("Error processing attendance file: {}", e.getMessage(), e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(
+                    TaskImportResponse.builder()
+                            .message("Error processing file: " + e.getMessage())
+                            .totalRows(0).successCount(0).failureCount(0)
+                            .build()
+            );
+        }
+    }
+
     @PostMapping(value = "/tasks/word/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
     @Operation(
