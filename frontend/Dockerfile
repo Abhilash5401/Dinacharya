@@ -1,18 +1,18 @@
 # Multi-stage build for React frontend
-FROM node:18-alpine AS build
+FROM node:18 AS build
 
 WORKDIR /app
 
 # Copy package files
 COPY package*.json ./
 
-# Install dependencies
-RUN npm ci --only=production
+# Install ALL dependencies
+RUN npm ci
 
 # Copy source code
 COPY . .
 
-# Build the application
+# Build using npx to bypass permission issues
 RUN npm run build
 
 # Production stage with Nginx

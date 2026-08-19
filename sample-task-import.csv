@@ -1,0 +1,11 @@
+Title,Description,Status,Priority,Due Date,Assignee Email,Team Name
+Implement login feature,Create JWT-based authentication system,TODO,HIGH,2024-12-31,developer@example.com,Backend Team
+Fix UI bug,Navigation menu not responsive on mobile,IN_PROGRESS,MEDIUM,2024-12-25,designer@example.com,Frontend Team
+Write API documentation,Document all REST endpoints with examples,TODO,LOW,2025-01-10,tech.writer@example.com,Documentation Team
+Database optimization,Improve query performance for reports,TODO,HIGH,2024-12-28,dba@example.com,DevOps Team
+Code review process,Establish peer review guidelines,IN_REVIEW,MEDIUM,2024-12-20,lead@example.com,Engineering Team
+Security audit,Conduct security assessment of APIs,TODO,CRITICAL,2024-12-15,security@example.com,Security Team
+Unit test coverage,Increase coverage to 80%,IN_PROGRESS,HIGH,2025-01-05,qa@example.com,QA Team
+Deploy to staging,Configure staging environment,TODO,MEDIUM,2024-12-22,devops@example.com,DevOps Team
+Update dependencies,Upgrade to latest framework versions,TODO,LOW,2025-01-15,maintainer@example.com,Maintenance Team
+User feedback analysis,Analyze user survey responses,DONE,MEDIUM,2024-12-10,product@example.com,Product Team

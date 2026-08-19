@@ -6,6 +6,7 @@ import { useUsers, useDepartments } from '@/hooks/useUsers';
 import { useTeams, useTeam } from '@/hooks/useTeams';
 import { Task, TaskPriority, TaskStatus, User } from '@/types';
 import { toast } from 'react-toastify';
+import TaskImport from '@/components/TaskImport';
 
 interface TaskFormState {
   assignedToId: string;
@@ -317,6 +318,24 @@ export default function TaskManagement() {
             <span className="tms-stat-value">{stats.overdue}</span>
           </div>
         </div>
+
+        {/* Task Import Section */}
+        {teams.length > 0 && selectedTeamId && (
+          <section className="tms-panel">
+            <h2 className="tms-panel-title">Import Tasks</h2>
+            <TaskImport 
+              teamId={selectedTeamId} 
+              onImportSuccess={(result) => {
+                toast.success(`Successfully imported ${result.successCount} task(s)!`);
+                if (result.failureCount > 0) {
+                  toast.warning(`${result.failureCount} task(s) failed to import. Check console for details.`);
+                  console.error('Import errors:', result.errors);
+                }
+                setTimeout(() => window.location.reload(), 1500);
+              }}
+            />
+          </section>
+        )}
 
         <section id="new-task-form" className="tms-panel">
           <h2 className="tms-panel-title">Add New Task</h2>

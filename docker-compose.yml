@@ -46,7 +46,7 @@ services:
   backend:
     build:
       context: .
-      dockerfile: Backend/Dockerfile
+      dockerfile: ./Backend/Dockerfile
     container_name: kanban-backend
     restart: unless-stopped
     ports:
@@ -96,7 +96,7 @@ services:
   # React Frontend
   frontend:
     build:
-      context: ./Frontend
+      context: ./frontend
       dockerfile: Dockerfile
     container_name: kanban-frontend
     restart: unless-stopped

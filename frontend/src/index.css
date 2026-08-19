@@ -814,4 +814,22 @@
     border-color: #fecaca;
   }
   .tms-action-delete:hover { background: #fecaca; }
+
+  /* Task Import Component Styles */
+  .task-import-container {
+    padding: 1rem;
+    background: white;
+    border-radius: 0.5rem;
+  }
+
+  .btn-outline {
+    background: white;
+    color: var(--primary);
+    border: 1px solid var(--primary);
+  }
+
+  .btn-outline:hover {
+    background: var(--surface-container-low);
+    transform: translateY(-1px);
+  }
 }
