@@ -348,6 +348,12 @@ public class FileImportServiceImpl implements FileImportService {
                 if (sheet == null) {
                     continue;
                 }
+                // Skip summary/config sheets (e.g. "ASE Master", "Setup", "Summary") — they aren't per-employee task logs.
+                String sn = sheet.getSheetName() == null ? "" : sheet.getSheetName().toLowerCase();
+                if (sn.contains("master") || sn.contains("setup") || sn.contains("summary") || sn.contains("dashboard")) {
+                    log.info("Skipping non-employee sheet '{}'", sheet.getSheetName());
+                    continue;
+                }
                 try {
                     parseAttendanceSheet(sheet, formatter, tasks);
                 } catch (Exception e) {
