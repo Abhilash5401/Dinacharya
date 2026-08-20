@@ -128,11 +128,12 @@ export default function TaskManagement() {
   const [filterDepartment, setFilterDepartment] = useState('');
   const [filterDate, setFilterDate] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
-  const [filterPriority, setFilterPriority] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
   const [remarkTaskId, setRemarkTaskId] = useState<string | null>(null);
   const [remarkText, setRemarkText] = useState('');
+  const [descriptionTaskId, setDescriptionTaskId] = useState<string | null>(null);
+  const [descriptionText, setDescriptionText] = useState('');
 
   const { data: tasksPage, isLoading } = useTasks({ size: 200 });
   const { data: usersPage } = useUsers();
@@ -197,10 +198,9 @@ export default function TaskManagement() {
       if (filterDepartment && task.assignedTo?.department !== filterDepartment) return false;
       if (filterDate && formatDateKey(task.deadline) !== filterDate) return false;
       if (filterStatus && task.status !== filterStatus) return false;
-      if (filterPriority && task.priority !== filterPriority) return false;
       return true;
     });
-  }, [tasks, filterEmployee, filterDepartment, filterDate, filterStatus, filterPriority]);
+  }, [tasks, filterEmployee, filterDepartment, filterDate, filterStatus]);
 
   const totalPages = Math.max(1, Math.ceil(filteredTasks.length / pageSize));
   const currentPage = Math.min(page, totalPages);
@@ -212,7 +212,7 @@ export default function TaskManagement() {
 
   useEffect(() => {
     setPage(1);
-  }, [filterEmployee, filterDepartment, filterDate, filterStatus, filterPriority, pageSize]);
+  }, [filterEmployee, filterDepartment, filterDate, filterStatus, pageSize]);
 
   useEffect(() => {
     if (page > totalPages) {
@@ -280,6 +280,11 @@ export default function TaskManagement() {
   const openRemark = (task: Task) => {
     setRemarkTaskId(task.id);
     setRemarkText(task.remark || '');
+  };
+
+  const openDescription = (task: Task) => {
+    setDescriptionTaskId(task.id);
+    setDescriptionText(task.description || '');
   };
 
   return (
@@ -489,12 +494,6 @@ export default function TaskManagement() {
               <option key={s} value={s}>{STATUS_LABELS[s]}</option>
             ))}
           </select>
-          <select className="input w-auto min-w-[140px]" value={filterPriority} onChange={(e) => setFilterPriority(e.target.value)}>
-            <option value="">All Priorities</option>
-            {Object.values(TaskPriority).map((p) => (
-              <option key={p} value={p}>{PRIORITY_LABELS[p]}</option>
-            ))}
-          </select>
         </div>
 
         <section className="tms-panel tms-table-panel overflow-hidden p-0">
@@ -514,7 +513,6 @@ export default function TaskManagement() {
                     <th>Task</th>
                     <th>Description</th>
                     <th>Date</th>
-                    <th>Priority</th>
                     <th>Status</th>
                     <th>Remark</th>
                     <th className="text-right">Actions</th>
@@ -525,12 +523,14 @@ export default function TaskManagement() {
                     <TaskRow
                       key={task.id}
                       task={task}
+                      isModerator={isModerator}
                       onDelete={() => {
                         if (confirm(`Delete "${task.title}"? This cannot be undone.`)) {
                           deleteTask.mutate(task.id);
                         }
                       }}
                       onRemark={() => openRemark(task)}
+                      onEditDescription={() => openDescription(task)}
                     />
                   ))}
                 </tbody>
@@ -591,18 +591,31 @@ export default function TaskManagement() {
           onClose={() => setRemarkTaskId(null)}
         />
       )}
+
+      {descriptionTaskId && (
+        <DescriptionModal
+          taskId={descriptionTaskId}
+          value={descriptionText}
+          onChange={setDescriptionText}
+          onClose={() => setDescriptionTaskId(null)}
+        />
+      )}
     </div>
   );
 }
 
 function TaskRow({
   task,
+  isModerator,
   onDelete,
   onRemark,
+  onEditDescription,
 }: {
   task: Task;
+  isModerator: boolean;
   onDelete: () => void;
   onRemark: () => void;
+  onEditDescription: () => void;
 }) {
   const updateStatus = useUpdateTaskStatus(task.id);
   const overdue = isOverdue(task);
@@ -627,21 +640,48 @@ function TaskRow({
         )}
       </td>
       <td className="font-medium text-charcoal">{task.title}</td>
-      <td className="text-charcoal-muted max-w-[200px] truncate">{task.description || '—'}</td>
+      <td>
+        <div className="flex items-center gap-2">
+          <span className="text-charcoal-muted max-w-[200px] truncate">
+            {task.description || '—'}
+          </span>
+          {isModerator && (
+            <button
+              type="button"
+              className="tms-action-btn tms-action-remark shrink-0"
+              title="Edit Description (Admin Only)"
+              onClick={onEditDescription}
+            >
+              <span className="material-symbols-outlined text-[14px]">edit</span>
+            </button>
+          )}
+        </div>
+      </td>
       <td className={overdue ? 'text-error font-medium' : 'text-charcoal-muted'}>
         {formatDate(task.deadline)}
-      </td>
-      <td>
-        <span className={priorityBadgeClass(task.priority)}>
-          {PRIORITY_LABELS[task.priority]}
-        </span>
       </td>
       <td>
         <span className={statusBadgeClass(task.status)}>
           {STATUS_LABELS[task.status]}
         </span>
       </td>
-      <td className="text-charcoal-muted max-w-[160px] truncate">{task.remark || '—'}</td>
+      <td>
+        <div className="flex items-center gap-2">
+          <span className="text-charcoal-muted max-w-[160px] truncate">
+            {task.remark || '—'}
+          </span>
+          {isModerator && (
+            <button
+              type="button"
+              className="tms-action-btn tms-action-remark shrink-0"
+              title="Edit Remark (Admin Only)"
+              onClick={onRemark}
+            >
+              <span className="material-symbols-outlined text-[14px]">edit</span>
+            </button>
+          )}
+        </div>
+      </td>
       <td>
         <div className="flex justify-end gap-1">
           <button
@@ -659,14 +699,6 @@ function TaskRow({
             onClick={() => updateStatus.mutate({ status: TaskStatus.IN_PROGRESS })}
           >
             <span className="material-symbols-outlined text-[16px]">schedule</span>
-          </button>
-          <button
-            type="button"
-            className="tms-action-btn tms-action-remark"
-            title="Remark"
-            onClick={onRemark}
-          >
-            <span className="material-symbols-outlined text-[16px]">edit_note</span>
           </button>
           <button
             type="button"
@@ -707,7 +739,7 @@ function RemarkModal({
   return (
     <div className="modal-overlay">
       <div className="modal p-6 w-full max-w-md">
-        <h3 className="text-headline-sm text-charcoal mb-4">Add Remark</h3>
+        <h3 className="text-headline-sm text-charcoal mb-4">Edit Remark (Admin Only)</h3>
         <textarea
           className="input min-h-[100px] resize-y mb-4"
           placeholder="Enter remark..."
@@ -723,6 +755,50 @@ function RemarkModal({
             disabled={updateTask.isPending}
           >
             {updateTask.isPending ? 'Saving...' : 'Save Remark'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DescriptionModal({
+  taskId,
+  value,
+  onChange,
+  onClose,
+}: {
+  taskId: string;
+  value: string;
+  onChange: (v: string) => void;
+  onClose: () => void;
+}) {
+  const updateTask = useUpdateTask(taskId);
+
+  const handleSave = async () => {
+    await updateTask.mutateAsync({ description: value });
+    onClose();
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal p-6 w-full max-w-md">
+        <h3 className="text-headline-sm text-charcoal mb-4">Edit Description (Admin Only)</h3>
+        <textarea
+          className="input min-h-[100px] resize-y mb-4"
+          placeholder="Enter description..."
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+        />
+        <div className="flex justify-end gap-3">
+          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+          <button
+            type="button"
+            className="btn btn-primary"
+            onClick={handleSave}
+            disabled={updateTask.isPending}
+          >
+            {updateTask.isPending ? 'Saving...' : 'Save Description'}
           </button>
         </div>
       </div>
