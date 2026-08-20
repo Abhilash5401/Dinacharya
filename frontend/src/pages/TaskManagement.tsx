@@ -627,7 +627,7 @@ function TaskRow({
           <div className="avatar-sm bg-charcoal shrink-0">
             {task.assignedTo?.name?.charAt(0).toUpperCase() || '?'}
           </div>
-          <span className="text-body-md text-charcoal font-medium truncate max-w-[100px]">
+          <span className="text-body-md text-charcoal font-medium" title={task.assignedTo?.name || 'Unassigned'}>
             {task.assignedTo?.name || 'Unassigned'}
           </span>
         </div>

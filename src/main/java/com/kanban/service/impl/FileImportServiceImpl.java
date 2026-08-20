@@ -7,11 +7,14 @@ import com.kanban.model.dto.response.TaskImportResponse;
 import com.kanban.model.dto.response.TaskResponse;
 import com.kanban.model.entity.Team;
 import com.kanban.model.entity.User;
+import com.kanban.model.entity.TimeEntry;
 import com.kanban.model.enums.TaskPriority;
 import com.kanban.model.enums.TaskStatus;
 import com.kanban.model.enums.UserRole;
+import com.kanban.model.enums.AttendanceStatus;
 import com.kanban.repository.TeamRepository;
 import com.kanban.repository.UserRepository;
+import com.kanban.repository.TimeEntryRepository;
 import com.kanban.service.FileImportService;
 import com.kanban.service.TaskService;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
@@ -46,6 +50,7 @@ public class FileImportServiceImpl implements FileImportService {
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final TimeEntryRepository timeEntryRepository;
 
     @Override
     @Transactional
@@ -305,6 +310,17 @@ public class FileImportServiceImpl implements FileImportService {
                 TaskResponse createdTask = taskService.createTask(request, userId);
                 importedTasks.add(createdTask);
                 successCount++;
+
+                // Create time entry if we have time tracking data (from attendance sheets)
+                if (assigneeId != null && taskData.getDueDate() != null &&
+                    (taskData.getLoginTime() != null || taskData.getLogoutTime() != null || taskData.getAttendance() != null)) {
+                    try {
+                        createTimeEntryFromTaskData(taskData, assigneeId);
+                        log.info("Created time entry for user on date {}", taskData.getDueDate());
+                    } catch (Exception timeEx) {
+                        log.warn("Failed to create time entry for row {}: {}", taskData.getRowNumber(), timeEx.getMessage());
+                    }
+                }
 
             } catch (Exception e) {
                 String errorMsg = String.format("Row %d: %s", taskData.getRowNumber(), e.getMessage());
@@ -768,5 +784,202 @@ public class FileImportServiceImpl implements FileImportService {
             }
         }
         return true;
+    }
+
+    /**
+     * Creates a TimeEntry record from task import data (for attendance/timesheet imports).
+     * Parses login/logout times and calculates hours worked.
+     */
+    private void createTimeEntryFromTaskData(TaskImportData taskData, UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        LocalTime entryTime = null;
+        LocalTime exitTime = null;
+        Double hoursWorked = null;
+
+        // Parse entry time (login)
+        if (taskData.getLoginTime() != null && !taskData.getLoginTime().isBlank()) {
+            entryTime = parseTimeString(taskData.getLoginTime());
+        }
+
+        // Parse exit time (logout)
+        if (taskData.getLogoutTime() != null && !taskData.getLogoutTime().isBlank()) {
+            exitTime = parseTimeString(taskData.getLogoutTime());
+        }
+
+        // Calculate hours worked
+        if (entryTime != null && exitTime != null) {
+            hoursWorked = calculateHoursWorked(entryTime, exitTime);
+        } else if (taskData.getHoursWorked() != null && !taskData.getHoursWorked().isBlank()) {
+            hoursWorked = parseHoursWorked(taskData.getHoursWorked());
+        }
+
+        // Determine attendance status
+        AttendanceStatus status = parseAttendanceStatus(taskData.getAttendance());
+
+        // Check if entry already exists
+        timeEntryRepository.findByUserAndEntryDate(user, taskData.getDueDate())
+                .ifPresent(existing -> {
+                    throw new IllegalStateException("Time entry already exists for this date");
+                });
+
+        // Create and save time entry
+        TimeEntry timeEntry = TimeEntry.builder()
+                .user(user)
+                .entryDate(taskData.getDueDate())
+                .entryTime(entryTime)
+                .exitTime(exitTime)
+                .hoursWorked(hoursWorked)
+                .status(status)
+                .remark(taskData.getRemark() != null ? taskData.getRemark() : taskData.getAttendance())
+                .build();
+
+        timeEntryRepository.save(timeEntry);
+        log.info("Created time entry for user {} on date {}", user.getName(), taskData.getDueDate());
+    }
+
+    /**
+     * Parses a time string like "10:30 AM" or "22:30" into LocalTime.
+     */
+    private LocalTime parseTimeString(String timeStr) {
+        if (timeStr == null || timeStr.isBlank()) {
+            return null;
+        }
+
+        try {
+            String normalized = timeStr.trim().toUpperCase();
+
+            // Try standard formats
+            String[] formats = {
+                "HH:mm:ss",
+                "HH:mm",
+                "hh:mm:ss a",
+                "hh:mm a"
+            };
+
+            for (String format : formats) {
+                try {
+                    return LocalTime.parse(normalized, java.time.format.DateTimeFormatter.ofPattern(format));
+                } catch (Exception ignored) {
+                }
+            }
+
+            log.warn("Could not parse time string: {}", timeStr);
+            return null;
+        } catch (Exception e) {
+            log.error("Error parsing time '{}': {}", timeStr, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Parses hours worked string like "7:30", "7.5", or "7 hours 30 minutes".
+     */
+    private Double parseHoursWorked(String hoursStr) {
+        if (hoursStr == null || hoursStr.isBlank()) {
+            return null;
+        }
+
+        try {
+            String normalized = hoursStr.trim().toLowerCase();
+
+            // Handle "7:30" format (7 hours 30 minutes = 7.5 hours)
+            if (normalized.contains(":")) {
+                String[] parts = normalized.split(":");
+                if (parts.length == 2) {
+                    int hours = Integer.parseInt(parts[0].trim());
+                    int minutes = Integer.parseInt(parts[1].trim());
+                    return hours + (minutes / 60.0);
+                }
+            }
+
+            // Handle "7.5" format
+            if (normalized.contains(".")) {
+                return Double.parseDouble(normalized);
+            }
+
+            // Handle "7 hours 30 minutes" format
+            if (normalized.contains("hour") || normalized.contains("minute")) {
+                int hours = 0;
+                int minutes = 0;
+
+                if (normalized.contains("hour")) {
+                    String[] parts = normalized.split("hour");
+                    hours = Integer.parseInt(parts[0].trim());
+                }
+
+                if (normalized.contains("minute")) {
+                    String[] parts = normalized.split("minute");
+                    String minPart = parts[0].trim();
+                    if (minPart.contains(" ")) {
+                        minPart = minPart.substring(minPart.lastIndexOf(" ") + 1);
+                    }
+                    minutes = Integer.parseInt(minPart);
+                }
+
+                return hours + (minutes / 60.0);
+            }
+
+            // Try direct integer/float parse
+            return Double.parseDouble(normalized);
+        } catch (Exception e) {
+            log.warn("Could not parse hours worked '{}': {}", hoursStr, e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Calculates hours worked between entry and exit times.
+     */
+    private Double calculateHoursWorked(LocalTime entryTime, LocalTime exitTime) {
+        if (entryTime == null || exitTime == null) {
+            return null;
+        }
+
+        try {
+            long minutes = java.time.temporal.ChronoUnit.MINUTES.between(entryTime, exitTime);
+            if (minutes < 0) {
+                // Handle case where exit time is next day (e.g., 23:00 to 01:00)
+                minutes = minutes + (24 * 60);
+            }
+            return Math.round((minutes / 60.0) * 100.0) / 100.0;
+        } catch (Exception e) {
+            log.error("Error calculating hours: {}", e.getMessage());
+            return null;
+        }
+    }
+
+    /**
+     * Parses attendance status from string like "Present", "Absent", etc.
+     */
+    private AttendanceStatus parseAttendanceStatus(String status) {
+        if (status == null || status.isBlank()) {
+            return AttendanceStatus.PRESENT;
+        }
+
+        try {
+            return AttendanceStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            String normalized = status.trim().toLowerCase();
+            if (normalized.contains("present")) {
+                return AttendanceStatus.PRESENT;
+            } else if (normalized.contains("absent")) {
+                return AttendanceStatus.ABSENT;
+            } else if (normalized.contains("half")) {
+                return AttendanceStatus.HALF_DAY;
+            } else if (normalized.contains("leave")) {
+                return AttendanceStatus.LEAVE;
+            } else if (normalized.contains("work from home") || normalized.contains("wfh")) {
+                return AttendanceStatus.WORK_FROM_HOME;
+            } else if (normalized.contains("online")) {
+                return AttendanceStatus.ONLINE;
+            } else if (normalized.contains("offline")) {
+                return AttendanceStatus.OFFLINE;
+            } else if (normalized.contains("away")) {
+                return AttendanceStatus.AWAY;
+            }
+            return AttendanceStatus.PRESENT;
+        }
     }
 }
