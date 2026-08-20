@@ -16,6 +16,7 @@ import java.util.List;
 public class DepartmentSeeder implements ApplicationRunner {
 
     public static final List<String> DEFAULT_DEPARTMENTS = List.of(
+        "ASE",
         "Business Development",
         "CyberSecurity",
         "Dev",

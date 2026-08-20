@@ -27,11 +27,17 @@ function formatMonthLabel(value: string) {
   return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
+function toLocalIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function currentMonthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const toIso = (date: Date) => date.toISOString().slice(0, 10);
-  return { from: toIso(start), to: toIso(now) };
+  return { from: toLocalIsoDate(start), to: toLocalIsoDate(now) };
 }
 
 export default function EmployeePerformancePage() {

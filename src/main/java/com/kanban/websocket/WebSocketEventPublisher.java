@@ -82,4 +82,12 @@ public class WebSocketEventPublisher {
         message.put("attachmentId", attachmentId);
         messagingTemplate.convertAndSend("/topic/teams/" + teamId, message);
     }
+
+    public void publishTeamTasksCleared(UUID teamId, int deletedCount) {
+        Map<String, Object> message = new HashMap<>();
+        message.put("type", "TASKS_CLEARED");
+        message.put("teamId", teamId);
+        message.put("deletedCount", deletedCount);
+        messagingTemplate.convertAndSend("/topic/teams/" + teamId, message);
+    }
 }

@@ -5,6 +5,7 @@ import com.kanban.model.dto.request.CreateTaskRequest;
 import com.kanban.model.dto.request.TaskImportData;
 import com.kanban.model.dto.response.TaskImportResponse;
 import com.kanban.model.dto.response.TaskResponse;
+import com.kanban.model.entity.AttendanceRecord;
 import com.kanban.model.entity.Team;
 import com.kanban.model.entity.User;
 import com.kanban.model.entity.TimeEntry;
@@ -12,6 +13,7 @@ import com.kanban.model.enums.TaskPriority;
 import com.kanban.model.enums.TaskStatus;
 import com.kanban.model.enums.UserRole;
 import com.kanban.model.enums.AttendanceStatus;
+import com.kanban.repository.AttendanceRecordRepository;
 import com.kanban.repository.TeamRepository;
 import com.kanban.repository.UserRepository;
 import com.kanban.repository.TimeEntryRepository;
@@ -51,6 +53,7 @@ public class FileImportServiceImpl implements FileImportService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final TimeEntryRepository timeEntryRepository;
+    private final AttendanceRecordRepository attendanceRecordRepository;
 
     @Override
     @Transactional
@@ -261,13 +264,6 @@ public class FileImportServiceImpl implements FileImportService {
 
         for (TaskImportData taskData : parsedTasks) {
             try {
-                // Validate required fields
-                if (taskData.getTitle() == null || taskData.getTitle().trim().isEmpty()) {
-                    errors.add(String.format("Row %d: Title is required", taskData.getRowNumber()));
-                    failureCount++;
-                    continue;
-                }
-
                 // Find assignee: prefer email, then fall back to employee name (attendance sheets)
                 UUID assigneeId = null;
                 if (taskData.getAssigneeEmail() != null && !taskData.getAssigneeEmail().isEmpty()) {
@@ -294,32 +290,57 @@ public class FileImportServiceImpl implements FileImportService {
                     }
                 }
 
-                // Create task request
-                CreateTaskRequest request = CreateTaskRequest.builder()
-                        .title(taskData.getTitle())
-                        .description(taskData.getDescription())
-                        .remark(taskData.getRemark())
-                        .status(taskData.getStatus() != null ? taskData.getStatus() : TaskStatus.TODO)
-                        .priority(taskData.getPriority() != null ? taskData.getPriority() : TaskPriority.MEDIUM)
-                        .deadline(taskData.getDueDate() != null ? taskData.getDueDate().atStartOfDay() : null)
-                        .assignedToId(assigneeId)
-                        .teamId(teamId)
-                        .build();
+                // ATTENDANCE-ONLY IMPORT: If this is from an attendance sheet WITHOUT a task title,
+                // skip task creation and go straight to time entry creation
+                boolean isAttendanceOnly = taskData.getTitle() != null && taskData.getTitle().startsWith("Attendance:");
+                
+                if (!isAttendanceOnly) {
+                    // Validate required fields for task creation
+                    if (taskData.getTitle() == null || taskData.getTitle().trim().isEmpty()) {
+                        errors.add(String.format("Row %d: Title is required", taskData.getRowNumber()));
+                        failureCount++;
+                        continue;
+                    }
 
-                // Create the task
-                TaskResponse createdTask = taskService.createTask(request, userId);
-                importedTasks.add(createdTask);
-                successCount++;
+                    // Create task request
+                    CreateTaskRequest request = CreateTaskRequest.builder()
+                            .title(taskData.getTitle())
+                            .description(taskData.getDescription())
+                            .remark(taskData.getRemark())
+                            .status(taskData.getStatus() != null ? taskData.getStatus() : TaskStatus.TODO)
+                            .priority(taskData.getPriority() != null ? taskData.getPriority() : TaskPriority.MEDIUM)
+                            .deadline(taskData.getDueDate() != null ? taskData.getDueDate().atStartOfDay() : null)
+                            .assignedToId(assigneeId)
+                            .teamId(teamId)
+                            .build();
 
-                // Create time entry if we have time tracking data (from attendance sheets)
-                if (assigneeId != null && taskData.getDueDate() != null &&
-                    (taskData.getLoginTime() != null || taskData.getLogoutTime() != null || taskData.getAttendance() != null)) {
+                    // Create the task
+                    TaskResponse createdTask = taskService.createTask(request, userId);
+                    importedTasks.add(createdTask);
+                    successCount++;
+                    log.info("Created task: {} for employee {}", taskData.getTitle(), taskData.getEmployeeName());
+                }
+
+                // Map login/logout/attendance into both time_entries and attendance_records
+                // so the moderator attendance dashboard can show imported sheets.
+                if (assigneeId != null && taskData.getDueDate() != null) {
                     try {
                         createTimeEntryFromTaskData(taskData, assigneeId);
-                        log.info("Created time entry for user on date {}", taskData.getDueDate());
+                        upsertAttendanceRecord(taskData, assigneeId);
+                        if (isAttendanceOnly) {
+                            successCount++;
+                        }
+                        log.info("Mapped attendance for user on date {}", taskData.getDueDate());
                     } catch (Exception timeEx) {
-                        log.warn("Failed to create time entry for row {}: {}", taskData.getRowNumber(), timeEx.getMessage());
+                        log.warn("Failed to map attendance for row {}: {}", taskData.getRowNumber(), timeEx.getMessage());
+                        if (isAttendanceOnly) {
+                            failureCount++;
+                            errors.add(String.format("Row %d: %s", taskData.getRowNumber(), timeEx.getMessage()));
+                        }
                     }
+                } else if (isAttendanceOnly) {
+                    failureCount++;
+                    errors.add(String.format("Row %d: Could not map attendance (missing employee or date)", taskData.getRowNumber()));
                 }
 
             } catch (Exception e) {
@@ -400,10 +421,12 @@ public class FileImportServiceImpl implements FileImportService {
         }
 
         String sheetEmployee = detectSheetEmployeeName(sheet, formatter, headerRowIdx, cols);
-        // The sheet tab is like "ASE Pattima kalyani" -> department "ASE", name "Pattima kalyani"
         String[] deptAndName = splitDepartmentAndName(sheetEmployee);
         String sheetDepartment = deptAndName[0];
         String sheetName = deptAndName[1];
+
+        // Check if this is a mixed sheet (has TASK column) or attendance-only
+        boolean hasTitleColumn = cols.containsKey("TASK");
 
         for (int r = headerRowIdx + 1; r <= sheet.getLastRowNum(); r++) {
             Row row = sheet.getRow(r);
@@ -411,53 +434,60 @@ public class FileImportServiceImpl implements FileImportService {
                 continue;
             }
 
-            // Title comes from the TASK column; fall back to DESCRIPTION if TASK is empty.
-            String taskText = cellText(row, cols.get("TASK"), formatter);
-            String descriptionText = cellText(row, cols.get("DESCRIPTION"), formatter);
-            String title = (taskText != null && !taskText.isBlank()) ? taskText : descriptionText;
-            if (title == null || title.isBlank()) {
-                continue; // skip rows with no task/description (attendance-only rows)
-            }
-
-            String statusText = cellText(row, cols.get("STATUS"), formatter);
-            String priorityText = cellText(row, cols.get("PRIORITY"), formatter);
-            String attendance = cellText(row, cols.get("ATTENDANCE"), formatter);
-            String explicitRemark = cellText(row, cols.get("REMARK"), formatter);
-            String login = cellText(row, cols.get("LOGIN"), formatter);
-            String logout = cellText(row, cols.get("LOGOUT"), formatter);
-            String hours = cellText(row, cols.get("HOURS"), formatter);
-
-            // Build a rich description from the timesheet details (login/logout/hours),
-            // unless the sheet already has a dedicated description column.
-            String description = (descriptionText != null && !descriptionText.isBlank() && taskText != null)
-                    ? descriptionText
-                    : composeWorkDetails(login, logout, hours);
-
-            // Remark = explicit remark, else the attendance value (e.g. "Present")
-            String remark = (explicitRemark != null && !explicitRemark.isBlank()) ? explicitRemark : attendance;
-
-            String rowDepartment = cellText(row, cols.get("DEPARTMENT"), formatter);
-            String department = (rowDepartment != null && !rowDepartment.isBlank()) ? rowDepartment : sheetDepartment;
-
-            String rowEmployee = cellText(row, cols.get("NAME"), formatter);
-            String employee = (rowEmployee != null && !rowEmployee.isBlank()) ? rowEmployee : sheetName;
-
             LocalDate date = null;
             if (cols.containsKey("DATE")) {
                 date = getCellValueAsDate(row.getCell(cols.get("DATE")));
             }
+            if (date == null) {
+                continue;
+            }
+
+            String attendance = cellText(row, cols.get("ATTENDANCE"), formatter);
+            if (attendance == null || attendance.isBlank()) {
+                attendance = cellText(row, cols.get("REMARK"), formatter);
+            }
+            String login = cellText(row, cols.get("LOGIN"), formatter);
+            String logout = cellText(row, cols.get("LOGOUT"), formatter);
+            String hours = cellText(row, cols.get("HOURS"), formatter);
+
+            String rowEmployee = cellText(row, cols.get("NAME"), formatter);
+            String employeeName = (rowEmployee != null && !rowEmployee.isBlank()) ? rowEmployee : sheetName;
+            String department = sheetDepartment;
+            if (cols.containsKey("DEPARTMENT")) {
+                String rowDept = cellText(row, cols.get("DEPARTMENT"), formatter);
+                if (rowDept != null && !rowDept.isBlank()) {
+                    department = rowDept;
+                }
+            }
+
+            boolean hasTimes = (login != null && !login.isBlank()) || (logout != null && !logout.isBlank());
+            boolean hasAttendanceMark = attendance != null && !attendance.isBlank();
+            if (!hasTimes && !hasAttendanceMark) {
+                continue;
+            }
+
+            String taskTitle = null;
+            if (hasTitleColumn) {
+                taskTitle = cellText(row, cols.get("TASK"), formatter);
+            }
+
+            String title = (taskTitle != null && !taskTitle.isBlank())
+                ? taskTitle
+                : ("Attendance: " + (hasAttendanceMark ? attendance : "Present"));
 
             TaskImportData data = TaskImportData.builder()
-                    .title(title.trim())
-                    .description(description)
-                    .remark(remark)
-                    .status(parseStatus(statusText))
-                    .priority(parsePriority(priorityText))
+                    .title(title)
                     .dueDate(date)
-                    .employeeName(employee)
+                    .employeeName(employeeName)
                     .department(department)
+                    .remark(attendance)
+                    .attendance(attendance)
+                    .description(composeWorkDetails(login, logout, hours))
                     .sheetName(sheet.getSheetName())
                     .rowNumber(r + 1)
+                    .loginTime(login)
+                    .logoutTime(logout)
+                    .hoursWorked(hours)
                     .build();
 
             tasks.add(data);
@@ -549,8 +579,10 @@ public class FileImportServiceImpl implements FileImportService {
                     keys.add(key);
                 }
             }
-            // A header must have a TASK column plus at least one other known column.
-            if (keys.contains("TASK") && keys.size() >= 2 && keys.size() > bestScore) {
+            boolean attendanceHeader = keys.contains("DATE")
+                && (keys.contains("LOGIN") || keys.contains("LOGOUT") || keys.contains("ATTENDANCE") || keys.contains("NAME"));
+            boolean taskHeader = keys.contains("TASK") && keys.size() >= 2;
+            if ((attendanceHeader || taskHeader) && keys.size() > bestScore) {
                 bestScore = keys.size();
                 bestRow = r;
             }
@@ -818,25 +850,97 @@ public class FileImportServiceImpl implements FileImportService {
         // Determine attendance status
         AttendanceStatus status = parseAttendanceStatus(taskData.getAttendance());
 
-        // Check if entry already exists
-        timeEntryRepository.findByUserAndEntryDate(user, taskData.getDueDate())
-                .ifPresent(existing -> {
-                    throw new IllegalStateException("Time entry already exists for this date");
-                });
+        // Check if entry already exists - update if it does, create if not
+        var existingEntry = timeEntryRepository.findByUserAndEntryDate(user, taskData.getDueDate());
+        
+        if (existingEntry.isPresent()) {
+            // Update existing entry
+            TimeEntry timeEntry = existingEntry.get();
+            timeEntry.setEntryTime(entryTime);
+            timeEntry.setExitTime(exitTime);
+            timeEntry.setHoursWorked(hoursWorked);
+            timeEntry.setStatus(status);
+            timeEntry.setRemark(taskData.getRemark() != null ? taskData.getRemark() : taskData.getAttendance());
+            
+            timeEntryRepository.save(timeEntry);
+            log.info("Updated time entry for user {} on date {}", user.getName(), taskData.getDueDate());
+        } else {
+            // Create new entry
+            TimeEntry timeEntry = TimeEntry.builder()
+                    .user(user)
+                    .entryDate(taskData.getDueDate())
+                    .entryTime(entryTime)
+                    .exitTime(exitTime)
+                    .hoursWorked(hoursWorked)
+                    .status(status)
+                    .remark(taskData.getRemark() != null ? taskData.getRemark() : taskData.getAttendance())
+                    .build();
 
-        // Create and save time entry
-        TimeEntry timeEntry = TimeEntry.builder()
+            timeEntryRepository.save(timeEntry);
+            log.info("Created time entry for user {} on date {}", user.getName(), taskData.getDueDate());
+        }
+    }
+
+    /**
+     * Writes the same imported row into attendance_records, which powers the
+     * moderator attendance dashboard (distinct from time_entries).
+     */
+    private void upsertAttendanceRecord(TaskImportData taskData, UUID userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
+        LocalTime entryTime = parseTimeString(taskData.getLoginTime());
+        LocalTime exitTime = parseTimeString(taskData.getLogoutTime());
+        LocalDate workDate = taskData.getDueDate();
+        AttendanceStatus dashboardStatus = toDashboardAttendanceStatus(taskData, entryTime, exitTime);
+
+        LocalDateTime entryDateTime = entryTime != null ? LocalDateTime.of(workDate, entryTime) : null;
+        LocalDateTime exitDateTime = exitTime != null ? LocalDateTime.of(workDate, exitTime) : null;
+
+        AttendanceRecord record = attendanceRecordRepository
+            .findByUserIdAndWorkDate(userId, workDate)
+            .orElse(null);
+
+        if (record == null) {
+            record = AttendanceRecord.builder()
                 .user(user)
-                .entryDate(taskData.getDueDate())
-                .entryTime(entryTime)
-                .exitTime(exitTime)
-                .hoursWorked(hoursWorked)
-                .status(status)
-                .remark(taskData.getRemark() != null ? taskData.getRemark() : taskData.getAttendance())
+                .workDate(workDate)
+                .entryTime(entryDateTime)
+                .exitTime(exitDateTime)
+                .status(dashboardStatus)
                 .build();
+        } else {
+            if (entryDateTime != null) {
+                record.setEntryTime(entryDateTime);
+            }
+            if (exitDateTime != null) {
+                record.setExitTime(exitDateTime);
+            }
+            record.setStatus(dashboardStatus);
+        }
 
-        timeEntryRepository.save(timeEntry);
-        log.info("Created time entry for user {} on date {}", user.getName(), taskData.getDueDate());
+        attendanceRecordRepository.save(record);
+        log.info("Upserted attendance record for {} on {}", user.getName(), workDate);
+    }
+
+    private AttendanceStatus toDashboardAttendanceStatus(
+        TaskImportData taskData,
+        LocalTime entryTime,
+        LocalTime exitTime
+    ) {
+        AttendanceStatus parsed = parseAttendanceStatus(taskData.getAttendance());
+        if (parsed == AttendanceStatus.ABSENT || parsed == AttendanceStatus.LEAVE) {
+            return AttendanceStatus.OFFLINE;
+        }
+        if (entryTime != null
+            || parsed == AttendanceStatus.PRESENT
+            || parsed == AttendanceStatus.WORK_FROM_HOME
+            || parsed == AttendanceStatus.ONLINE
+            || parsed == AttendanceStatus.ON_BREAK
+            || parsed == AttendanceStatus.HALF_DAY) {
+            return AttendanceStatus.ONLINE;
+        }
+        return AttendanceStatus.OFFLINE;
     }
 
     /**

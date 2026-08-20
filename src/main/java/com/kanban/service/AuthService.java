@@ -83,11 +83,14 @@ public class AuthService {
 
     @Transactional
     public AuthResponse login(LoginRequest request) {
+        String email = request.getEmail() == null ? "" : request.getEmail().trim().toLowerCase();
+        request.setEmail(email);
+
         authenticationManager.authenticate(
-            new UsernamePasswordAuthenticationToken(request.getEmail(), request.getPassword())
+            new UsernamePasswordAuthenticationToken(email, request.getPassword())
         );
 
-        User user = userRepository.findByEmail(request.getEmail())
+        User user = userRepository.findByEmailIgnoreCase(email)
             .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         user.setLastActive(LocalDateTime.now());

@@ -266,6 +266,58 @@ public class TaskService {
         webSocketEventPublisher.publishTaskDeleted(teamId, id);
     }
 
+    @Transactional
+    public int deleteAllTasks(UUID teamId, UUID currentUserId) {
+        User currentUser = userService.getUserEntityById(currentUserId);
+
+        // Only ADMIN role can delete all tasks
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admins can delete all tasks");
+        }
+
+        int deletedCount = 0;
+        if (teamId != null) {
+            // Delete all tasks in a specific team
+            java.util.List<Task> tasks = taskRepository.findByTeamId(teamId);
+            deletedCount = tasks.size();
+            for (Task task : tasks) {
+                clearTaskRelations(task);
+            }
+            taskRepository.deleteAll(tasks);
+            auditService.logAction(currentUserId, com.kanban.model.enums.AuditAction.DELETE, "Task", teamId, 
+                java.util.Map.of("event", "delete_all_in_team", "count", deletedCount));
+            webSocketEventPublisher.publishTeamTasksCleared(teamId, deletedCount);
+        } else {
+            // Delete ALL tasks in the system
+            java.util.List<Task> allTasks = taskRepository.findAll();
+            deletedCount = allTasks.size();
+            java.util.Set<UUID> affectedTeams = new java.util.HashSet<>();
+            for (Task task : allTasks) {
+                clearTaskRelations(task);
+                affectedTeams.add(task.getTeam().getId());
+            }
+            taskRepository.deleteAll(allTasks);
+            auditService.logAction(currentUserId, com.kanban.model.enums.AuditAction.DELETE, "Task", currentUserId, 
+                java.util.Map.of("event", "delete_all_system", "count", deletedCount));
+            for (UUID teamId2 : affectedTeams) {
+                webSocketEventPublisher.publishTeamTasksCleared(teamId2, deletedCount);
+            }
+        }
+        return deletedCount;
+    }
+
+    private void clearTaskRelations(Task task) {
+        if (task.getComments() != null) {
+            task.getComments().clear();
+        }
+        if (task.getAttachments() != null) {
+            task.getAttachments().clear();
+        }
+        if (task.getLabels() != null) {
+            task.getLabels().clear();
+        }
+    }
+
     private void validateTaskEditPermission(Task task, UUID currentUserId) {
         User currentUser = userService.getUserEntityById(currentUserId);
 

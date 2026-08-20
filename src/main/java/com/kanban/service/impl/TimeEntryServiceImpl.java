@@ -41,10 +41,34 @@ public class TimeEntryServiceImpl implements TimeEntryService {
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
 
         // Check if entry already exists for this user and date
-        timeEntryRepository.findByUserAndEntryDate(user, request.getEntryDate())
-                .ifPresent(existing -> {
-                    throw new IllegalStateException("Time entry already exists for this date");
-                });
+        var existingEntry = timeEntryRepository.findByUserAndEntryDate(user, request.getEntryDate());
+        
+        if (existingEntry.isPresent()) {
+            // Update existing entry instead of throwing error
+            TimeEntry timeEntry = existingEntry.get();
+            if (request.getEntryTime() != null) {
+                timeEntry.setEntryTime(request.getEntryTime());
+            }
+            if (request.getExitTime() != null) {
+                timeEntry.setExitTime(request.getExitTime());
+            }
+            if (request.getHoursWorked() != null) {
+                timeEntry.setHoursWorked(request.getHoursWorked());
+            }
+            if (request.getStatus() != null) {
+                timeEntry.setStatus(request.getStatus());
+            }
+            if (request.getBreakDurationMinutes() != null) {
+                timeEntry.setBreakDurationMinutes(request.getBreakDurationMinutes());
+            }
+            if (request.getRemark() != null) {
+                timeEntry.setRemark(request.getRemark());
+            }
+            
+            TimeEntry updated = timeEntryRepository.save(timeEntry);
+            log.info("Updated existing time entry for user {} on date {}", user.getName(), request.getEntryDate());
+            return timeEntryMapper.toResponse(updated);
+        }
 
         TimeEntry timeEntry = TimeEntry.builder()
                 .user(user)

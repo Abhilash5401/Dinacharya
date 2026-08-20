@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
-import { useTasks, useCreateTask, useUpdateTask, useUpdateTaskStatus, useDeleteTask } from '@/hooks/useTasks';
+import { useTasks, useCreateTask, useUpdateTask, useUpdateTaskStatus, useDeleteTask, useDeleteAllTasks } from '@/hooks/useTasks';
 import { useUsers, useDepartments } from '@/hooks/useUsers';
 import { useTeams, useTeam } from '@/hooks/useTeams';
 import { Task, TaskPriority, TaskStatus, User } from '@/types';
@@ -134,6 +134,7 @@ export default function TaskManagement() {
   const [remarkText, setRemarkText] = useState('');
   const [descriptionTaskId, setDescriptionTaskId] = useState<string | null>(null);
   const [descriptionText, setDescriptionText] = useState('');
+  const [showDeleteAllModal, setShowDeleteAllModal] = useState(false);
 
   const { data: tasksPage, isLoading } = useTasks({ size: 200 });
   const { data: usersPage } = useUsers();
@@ -142,6 +143,7 @@ export default function TaskManagement() {
 
   const createTask = useCreateTask();
   const deleteTask = useDeleteTask();
+  const deleteAllTasks = useDeleteAllTasks();
 
   const tasks = tasksPage?.content || [];
   const users = usersPage?.content || [];
@@ -279,7 +281,7 @@ export default function TaskManagement() {
 
   const openRemark = (task: Task) => {
     setRemarkTaskId(task.id);
-    setRemarkText(task.remark || '');
+    setRemarkText(''); // Start with empty remark
   };
 
   const openDescription = (task: Task) => {
@@ -327,7 +329,20 @@ export default function TaskManagement() {
         {/* Task Import Section */}
         {teams.length > 0 && selectedTeamId && (
           <section className="tms-panel">
-            <h2 className="tms-panel-title">Import Tasks</h2>
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="tms-panel-title">Import Tasks</h2>
+              {isModerator && (
+                <button
+                  type="button"
+                  className="btn btn-danger text-sm"
+                  onClick={() => setShowDeleteAllModal(true)}
+                  title="Delete all tasks in the system (Admin only)"
+                >
+                  <span className="material-symbols-outlined text-[14px]">delete_sweep</span>
+                  Delete All Tasks
+                </button>
+              )}
+            </div>
             <TaskImport 
               teamId={selectedTeamId} 
               onImportSuccess={(result) => {
@@ -511,7 +526,6 @@ export default function TaskManagement() {
                     <th>Employee</th>
                     <th>Department</th>
                     <th>Task</th>
-                    <th>Description</th>
                     <th>Date</th>
                     <th>Status</th>
                     <th>Remark</th>
@@ -600,6 +614,19 @@ export default function TaskManagement() {
           onClose={() => setDescriptionTaskId(null)}
         />
       )}
+
+      {showDeleteAllModal && (
+        <DeleteAllTasksModal
+          isOpen={showDeleteAllModal}
+          isLoading={deleteAllTasks.isPending}
+          onConfirm={async () => {
+            await deleteAllTasks.mutateAsync();
+            setShowDeleteAllModal(false);
+            setTimeout(() => window.location.reload(), 1000);
+          }}
+          onClose={() => setShowDeleteAllModal(false)}
+        />
+      )}
     </div>
   );
 }
@@ -640,23 +667,6 @@ function TaskRow({
         )}
       </td>
       <td className="font-medium text-charcoal">{task.title}</td>
-      <td>
-        <div className="flex items-center gap-2">
-          <span className="text-charcoal-muted max-w-[200px] truncate">
-            {task.description || '—'}
-          </span>
-          {isModerator && (
-            <button
-              type="button"
-              className="tms-action-btn tms-action-remark shrink-0"
-              title="Edit Description (Admin Only)"
-              onClick={onEditDescription}
-            >
-              <span className="material-symbols-outlined text-[14px]">edit</span>
-            </button>
-          )}
-        </div>
-      </td>
       <td className={overdue ? 'text-error font-medium' : 'text-charcoal-muted'}>
         {formatDate(task.deadline)}
       </td>
@@ -668,7 +678,7 @@ function TaskRow({
       <td>
         <div className="flex items-center gap-2">
           <span className="text-charcoal-muted max-w-[160px] truncate">
-            {task.remark || '—'}
+            —
           </span>
           {isModerator && (
             <button
@@ -762,6 +772,54 @@ function RemarkModal({
   );
 }
 
+function DeleteAllTasksModal({
+  isOpen,
+  isLoading,
+  onConfirm,
+  onClose,
+}: {
+  isOpen: boolean;
+  isLoading: boolean;
+  onConfirm: () => void;
+  onClose: () => void;
+}) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal p-6 w-full max-w-md">
+        <h3 className="text-headline-sm text-charcoal mb-4 flex items-center gap-2">
+          <span className="material-symbols-outlined text-error text-[24px]">warning</span>
+          Delete All Tasks?
+        </h3>
+        <p className="text-body-md text-charcoal-muted mb-6">
+          This action will permanently delete ALL tasks in the system. This cannot be undone.
+        </p>
+        <div className="bg-error bg-opacity-10 border border-error border-opacity-20 rounded p-3 mb-6">
+          <p className="text-sm text-error font-medium">⚠️ Warning: This is a destructive action</p>
+        </div>
+        <div className="flex justify-end gap-3">
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={onClose}
+            disabled={isLoading}
+          >
+            Cancel
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger"
+            onClick={onConfirm}
+            disabled={isLoading}
+          >
+            {isLoading ? 'Deleting...' : 'Delete All Tasks'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
 function DescriptionModal({
   taskId,
   value,

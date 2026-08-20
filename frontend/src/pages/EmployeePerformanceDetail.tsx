@@ -4,6 +4,7 @@ import {
   Bar,
   BarChart,
   CartesianGrid,
+  Cell,
   Legend,
   Line,
   LineChart,
@@ -22,11 +23,17 @@ function formatMonthLabel(value: string) {
   return date.toLocaleDateString(undefined, { month: 'short', year: 'numeric' });
 }
 
+function toLocalIsoDate(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function currentMonthRange() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  const toIso = (date: Date) => date.toISOString().slice(0, 10);
-  return { from: toIso(start), to: toIso(now) };
+  return { from: toLocalIsoDate(start), to: toLocalIsoDate(now) };
 }
 
 export default function EmployeePerformanceDetail() {
@@ -146,7 +153,11 @@ export default function EmployeePerformanceDetail() {
               <XAxis dataKey="name" tick={{ fill: '#5C5E58' }} />
               <YAxis domain={[0, 100]} tick={{ fill: '#5C5E58' }} />
               <Tooltip />
-              <Bar dataKey="score" name="Score" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="score" name="Score" radius={[6, 6, 0, 0]}>
+                {scoreBreakdown.map((entry) => (
+                  <Cell key={entry.name} fill={entry.fill} />
+                ))}
+              </Bar>
             </BarChart>
           </ResponsiveContainer>
         </div>

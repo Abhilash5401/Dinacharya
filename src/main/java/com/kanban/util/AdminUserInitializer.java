@@ -46,7 +46,7 @@ public class AdminUserInitializer implements CommandLineRunner {
             return;
         }
 
-        if (userRepository.findByEmail(adminEmail).isEmpty()) {
+        if (userRepository.findByEmailIgnoreCase(adminEmail).isEmpty()) {
             log.info("Creating default admin user for {}", adminEmail);
 
             User admin = User.builder()

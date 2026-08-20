@@ -158,4 +158,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Modifying
     @Query("UPDATE Task t SET t.createdBy = :replacement WHERE t.createdBy.id = :userId")
     int reassignCreator(@Param("userId") UUID userId, @Param("replacement") User replacement);
+
+    @Query("SELECT t FROM Task t WHERE t.team.id = :teamId")
+    List<Task> findByTeamId(@Param("teamId") UUID teamId);
 }

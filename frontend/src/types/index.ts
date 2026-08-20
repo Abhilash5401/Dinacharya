@@ -21,6 +21,8 @@ export enum TaskPriority {
 }
 
 export enum AttendanceStatus {
+  PRESENT = 'PRESENT',
+  ABSENT = 'ABSENT',
   ONLINE = 'ONLINE',
   ON_BREAK = 'ON_BREAK',
   OFFLINE = 'OFFLINE',
@@ -178,7 +180,7 @@ export interface AttendanceBreak {
 }
 
 export interface AttendanceRecord {
-  id: string;
+  id?: string;
   userId: string;
   memberName: string;
   memberEmail: string;

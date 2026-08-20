@@ -63,6 +63,13 @@ export const useLogout = () => {
     onSuccess: () => {
       logout();
       toast.info('Logged out');
+      window.location.href = '/login';
+    },
+    onError: (error) => {
+      console.error('Logout error:', error);
+      // Force logout even if backend fails
+      logout();
+      window.location.href = '/login';
     },
   });
 };

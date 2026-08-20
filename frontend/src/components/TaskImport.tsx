@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Upload, FileSpreadsheet, FileText, Download, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { apiClient } from '@/api/client';
 
@@ -17,6 +18,7 @@ interface TaskImportProps {
 }
 
 const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
+  const queryClient = useQueryClient();
   const [importing, setImporting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [importResult, setImportResult] = useState<TaskImportResponse | null>(null);
@@ -61,6 +63,7 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       setImportResult(result);
       
       if (result.successCount > 0) {
+        queryClient.invalidateQueries({ queryKey: ['attendance'] });
         onImportSuccess?.(result);
       }
     } catch (error: any) {

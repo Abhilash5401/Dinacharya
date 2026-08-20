@@ -45,7 +45,7 @@ public class TimeEntry {
     private Double hoursWorked;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "status", length = 20)
+    @Column(name = "status", length = 50, columnDefinition = "VARCHAR(50)")
     private AttendanceStatus status;
 
     @Column(name = "break_duration_minutes")
