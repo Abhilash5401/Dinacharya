@@ -532,7 +532,7 @@ public class FileImportServiceImpl implements FileImportService {
                 .email(email)
                 .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .name(name)
-                .role(UserRole.MEMBER)
+                .role(UserRole.USER)
                 .department((department != null && !department.isBlank()) ? department.trim() : null)
                 .isActive(true)
                 .lastActive(LocalDateTime.now())

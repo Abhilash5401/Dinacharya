@@ -87,4 +87,13 @@ public class User {
 
     @OneToMany(mappedBy = "uploadedBy", cascade = CascadeType.ALL, orphanRemoval = true, fetch = FetchType.LAZY)
     private Set<Attachment> attachments = new HashSet<>();
+
+    @Column(name = "admin_request_pending")
+    private Boolean adminRequestPending = false;
+
+    @Column(name = "admin_request_date")
+    private LocalDateTime adminRequestDate;
+
+    @Column(name = "admin_request_reason", columnDefinition = "TEXT")
+    private String adminRequestReason;
 }

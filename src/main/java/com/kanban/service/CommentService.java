@@ -84,9 +84,9 @@ public class CommentService {
         User currentUser = userService.getUserEntityById(currentUserId);
 
         boolean isAuthor = comment.getAuthor().getId().equals(currentUserId);
-        boolean isModerator = currentUser.getRole() == UserRole.MODERATOR || currentUser.getRole() == UserRole.ADMIN;
+        boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
 
-        if (!isAuthor && !isModerator) {
+        if (!isAuthor && !isAdmin) {
             throw new UnauthorizedException("You don't have permission to delete this comment");
         }
 
@@ -98,31 +98,31 @@ public class CommentService {
     }
 
     @Transactional
-    public CommentResponse flagComment(UUID id, UUID moderatorId) {
+    public CommentResponse flagComment(UUID id, UUID adminId) {
         Comment comment = commentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + id));
 
-        User moderator = userService.getUserEntityById(moderatorId);
-        if (moderator.getRole() != UserRole.MODERATOR && moderator.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only moderators can flag comments");
+        User admin = userService.getUserEntityById(adminId);
+        if (admin.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can flag comments");
         }
 
         comment.setFlagged(true);
         comment = commentRepository.save(comment);
 
-        auditService.logCommentFlagged(moderatorId, id);
+        auditService.logCommentFlagged(adminId, id);
 
         return commentMapper.toResponse(comment);
     }
 
     @Transactional
-    public CommentResponse resolveComment(UUID id, UUID moderatorId) {
+    public CommentResponse resolveComment(UUID id, UUID adminId) {
         Comment comment = commentRepository.findById(id)
             .orElseThrow(() -> new ResourceNotFoundException("Comment not found with id: " + id));
 
-        User moderator = userService.getUserEntityById(moderatorId);
-        if (moderator.getRole() != UserRole.MODERATOR && moderator.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only moderators can resolve flagged comments");
+        User admin = userService.getUserEntityById(adminId);
+        if (admin.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can resolve flagged comments");
         }
 
         comment.setFlagged(false);

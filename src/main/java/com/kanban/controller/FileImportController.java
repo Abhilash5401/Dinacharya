@@ -33,7 +33,7 @@ public class FileImportController {
     private final com.kanban.security.CustomUserDetailsService userDetailsService;
 
     @PostMapping(value = "/tasks/excel/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from Excel file",
             description = "Upload an Excel (.xlsx) file to import multiple tasks at once. " +
@@ -102,7 +102,7 @@ public class FileImportController {
     }
 
     @PostMapping(value = "/tasks/attendance/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from a daily attendance/tasksheet workbook",
             description = "Upload a multi-sheet Excel (.xlsx) attendance tasksheet. Each sheet is scanned for a header " +
@@ -163,7 +163,7 @@ public class FileImportController {
     }
 
     @PostMapping(value = "/tasks/word/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
-    @PreAuthorize("hasAnyRole('ADMIN', 'MODERATOR', 'USER')")
+    @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from Word file",
             description = "Upload a Word (.docx) file to import multiple tasks at once. " +

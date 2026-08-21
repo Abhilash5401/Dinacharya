@@ -153,11 +153,9 @@ public class UserService {
     @Transactional
     public UserResponse updateEmploymentType(UUID id, EmploymentType employmentType, UUID currentUserId) {
         User currentUser = getUserEntityById(currentUserId);
-        if (currentUser.getRole() != UserRole.ADMIN
-            && currentUser.getRole() != UserRole.MODERATOR
-            && currentUser.getRole() != UserRole.TEAM_LEAD) {
+        if (currentUser.getRole() != UserRole.ADMIN) {
             throw new UnauthorizedException(
-                "Only team leads, moderators, or admins can change employment type"
+                "Only admin can change employment type"
             );
         }
 
@@ -208,7 +206,7 @@ public class UserService {
             .professionalRole(StringUtils.hasText(request.getProfessionalRole()) ? request.getProfessionalRole().trim() : null)
             .githubProfile(normalizeGithub(request.getGithubProfile()))
             .employeeStatus(EmployeeStatus.ONBOARDING)
-            .role(UserRole.MEMBER)
+            .role(UserRole.USER)
             .employmentType(EmploymentType.FULL_TIME)
             .isActive(true)
             .skills(new HashSet<>())

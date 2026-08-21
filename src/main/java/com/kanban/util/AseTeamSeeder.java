@@ -66,7 +66,7 @@ public class AseTeamSeeder implements ApplicationRunner {
                 .password(passwordEncoder.encode(DEFAULT_PASSWORD))
                 .department(DEPARTMENT)
                 .professionalRole(ROLE)
-                .role(UserRole.MEMBER)
+                .role(UserRole.USER)
                 .employeeStatus(EmployeeStatus.ACTIVE)
                 .employmentType(EmploymentType.FULL_TIME)
                 .isActive(true)

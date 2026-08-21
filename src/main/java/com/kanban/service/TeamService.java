@@ -66,9 +66,9 @@ public class TeamService {
         try {
             User lead = userService.getUserEntityById(leadId);
 
-            if (lead.getRole() != UserRole.TEAM_LEAD && lead.getRole() != UserRole.ADMIN) {
-                lead.setRole(UserRole.TEAM_LEAD);
-                userRepository.save(lead);
+            // Only ADMIN can create teams
+            if (lead.getRole() != UserRole.ADMIN) {
+                throw new UnauthorizedException("Only admin users can create teams");
             }
 
             Team team = Team.builder()
@@ -120,8 +120,8 @@ public class TeamService {
 
         User currentUser = userService.getUserEntityById(currentUserId);
         
-        if (!team.getLead().getId().equals(currentUserId) && currentUser.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only team lead or admin can update team");
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can update team");
         }
 
         teamMapper.updateTeamFromRequest(request, team);
@@ -137,8 +137,8 @@ public class TeamService {
 
         User currentUser = userService.getUserEntityById(currentUserId);
         
-        if (!team.getLead().getId().equals(currentUserId) && currentUser.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only team lead or admin can add members");
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can add members");
         }
 
         User newMember = userService.getUserEntityById(userId);
@@ -155,8 +155,8 @@ public class TeamService {
 
         User currentUser = userService.getUserEntityById(currentUserId);
         
-        if (!team.getLead().getId().equals(currentUserId) && currentUser.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only team lead or admin can remove members");
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can remove members");
         }
 
         if (team.getLead().getId().equals(userId)) {
@@ -177,8 +177,8 @@ public class TeamService {
 
         User currentUser = userService.getUserEntityById(currentUserId);
         
-        if (!team.getLead().getId().equals(currentUserId) && currentUser.getRole() != UserRole.ADMIN) {
-            throw new UnauthorizedException("Only team lead or admin can delete team");
+        if (currentUser.getRole() != UserRole.ADMIN) {
+            throw new UnauthorizedException("Only admin can delete team");
         }
 
         teamRepository.delete(team);

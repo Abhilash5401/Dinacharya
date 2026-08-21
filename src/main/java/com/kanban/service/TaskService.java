@@ -65,7 +65,7 @@ public class TaskService {
                 .map(taskMapper::toResponse);
         }
 
-        if (currentUser.getRole() == UserRole.ADMIN || currentUser.getRole() == UserRole.MODERATOR) {
+        if (currentUser.getRole() == UserRole.ADMIN) {
             return taskRepository.findAllTasksByFilters(status, priority, assignedToId, pageable)
                 .map(taskMapper::toResponse);
         }
@@ -94,12 +94,12 @@ public class TaskService {
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request, UUID createdById) {
         User createdBy = userService.getUserEntityById(createdById);
-        boolean privileged = createdBy.getRole() == UserRole.ADMIN || createdBy.getRole() == UserRole.MODERATOR;
+        boolean isAdmin = createdBy.getRole() == UserRole.ADMIN;
         Team team;
 
         if (request.getTeamId() != null) {
             team = teamService.getTeamEntityById(request.getTeamId());
-            if (!teamService.isMember(team, createdBy) && !privileged) {
+            if (!teamService.isMember(team, createdBy) && !isAdmin) {
                 teamService.ensureMember(team, createdBy);
             }
         } else {
@@ -113,12 +113,12 @@ public class TaskService {
 
         if (request.getAssignedToId() != null) {
             User assignee = userService.getUserEntityById(request.getAssignedToId());
-            if (!teamService.isMember(team, assignee) && !privileged && !assignee.getId().equals(createdById)) {
+            if (!teamService.isMember(team, assignee) && !isAdmin && !assignee.getId().equals(createdById)) {
                 throw new UnauthorizedException("You can only assign daily tasks to yourself");
             }
             teamService.ensureMember(team, assignee);
             task.setAssignedTo(assignee);
-        } else if (!privileged) {
+        } else if (!isAdmin) {
             teamService.ensureMember(team, createdBy);
             task.setAssignedTo(createdBy);
         }
@@ -190,9 +190,8 @@ public class TaskService {
         User currentUser = userService.getUserEntityById(currentUserId);
         boolean isCreator = task.getCreatedBy().getId().equals(currentUserId);
         boolean isAssignee = task.getAssignedTo() != null && task.getAssignedTo().getId().equals(currentUserId);
-        boolean isTeamLead = task.getTeam().getLead().getId().equals(currentUserId);
-        boolean isModerator = currentUser.getRole() == UserRole.MODERATOR || currentUser.getRole() == UserRole.ADMIN;
-        if (!isCreator && !isAssignee && !isTeamLead && !isModerator) {
+        boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
+        if (!isCreator && !isAssignee && !isAdmin) {
             throw new UnauthorizedException("You don't have permission to update this task status");
         }
 
@@ -322,10 +321,9 @@ public class TaskService {
         User currentUser = userService.getUserEntityById(currentUserId);
 
         boolean isCreator = task.getCreatedBy().getId().equals(currentUserId);
-        boolean isTeamLead = task.getTeam().getLead().getId().equals(currentUserId);
-        boolean isModerator = currentUser.getRole() == UserRole.MODERATOR || currentUser.getRole() == UserRole.ADMIN;
+        boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
 
-        if (!isCreator && !isTeamLead && !isModerator) {
+        if (!isCreator && !isAdmin) {
             throw new UnauthorizedException("You don't have permission to edit this task");
         }
     }

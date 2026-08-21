@@ -76,10 +76,9 @@ public class AttachmentService {
         User currentUser = userService.getUserEntityById(currentUserId);
 
         boolean isUploader = attachment.getUploadedBy().getId().equals(currentUserId);
-        boolean isTeamLead = attachment.getTask().getTeam().getLead().getId().equals(currentUserId);
-        boolean isModerator = currentUser.getRole() == UserRole.MODERATOR || currentUser.getRole() == UserRole.ADMIN;
+        boolean isAdmin = currentUser.getRole() == UserRole.ADMIN;
 
-        if (!isUploader && !isTeamLead && !isModerator) {
+        if (!isUploader && !isAdmin) {
             throw new UnauthorizedException("You don't have permission to delete this attachment");
         }
 

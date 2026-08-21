@@ -57,7 +57,7 @@ public class AuthService {
         User user = userMapper.fromRegisterRequest(request);
         user.setEmail(email);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
-        user.setRole(UserRole.MEMBER);
+        user.setRole(UserRole.USER);
         user.setIsActive(true);
         user.setEmployeeStatus(com.kanban.model.enums.EmployeeStatus.ACTIVE);
         if (user.getEmploymentType() == null) {

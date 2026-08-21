@@ -176,7 +176,7 @@ public class AttendanceAnalyticsService {
     }
 
     private static boolean canView(UUID targetUserId, UUID currentUserId, UserRole currentUserRole) {
-        if (currentUserRole == UserRole.ADMIN || currentUserRole == UserRole.MODERATOR) {
+        if (currentUserRole == UserRole.ADMIN) {
             return true;
         }
         return targetUserId.equals(currentUserId);
