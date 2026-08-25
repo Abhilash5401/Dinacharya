@@ -46,33 +46,101 @@ public class AseTeamSeeder implements ApplicationRunner {
 
     @Override
     public void run(ApplicationArguments args) {
-        if (!departmentRepository.existsByNameIgnoreCase(DEPARTMENT)) {
-            departmentRepository.save(Department.builder().name(DEPARTMENT).build());
-            log.info("Seeded department: {}", DEPARTMENT);
+        log.info("Starting ASE Team Seeder...");
+        
+        try {
+            // Step 1: Clean up test data first
+            cleanupTestData();
+            
+            // Step 2: Create ASE department if needed
+            if (!departmentRepository.existsByNameIgnoreCase(DEPARTMENT)) {
+                departmentRepository.save(Department.builder().name(DEPARTMENT).build());
+                log.info("Seeded department: {}", DEPARTMENT);
+            }
+
+            // Step 3: Create ASE team members
+            for (String name : ASE_MEMBERS) {
+                try {
+                    if (userRepository.findByNameIgnoreCase(name).isPresent()) {
+                        continue;
+                    }
+                } catch (Exception e) {
+                    // Handle enum deserialization errors during role migration
+                    log.debug("Skipping user lookup for '{}' due to role migration: {}", name, e.getMessage());
+                }
+                
+                String email = emailFor(name);
+                try {
+                    if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
+                        continue;
+                    }
+                } catch (Exception e) {
+                    // Handle enum deserialization errors during role migration
+                    log.debug("Skipping email lookup for '{}' due to role migration: {}", email, e.getMessage());
+                }
+
+                User user = User.builder()
+                    .name(name)
+                    .email(email)
+                    .password(passwordEncoder.encode(DEFAULT_PASSWORD))
+                    .department(DEPARTMENT)
+                    .professionalRole(ROLE)
+                    .role(UserRole.USER)
+                    .employeeStatus(EmployeeStatus.ACTIVE)
+                    .employmentType(EmploymentType.FULL_TIME)
+                    .isActive(true)
+                    .build();
+                userRepository.save(user);
+                log.info("Seeded ASE member '{}' ({})", name, email);
+            }
+        } catch (Exception e) {
+            log.error("Error in ASE Team Seeder", e);
         }
+    }
 
-        for (String name : ASE_MEMBERS) {
-            if (userRepository.findByNameIgnoreCase(name).isPresent()) {
-                continue;
+    private void cleanupTestData() {
+        try {
+            log.info("Cleaning up test data...");
+            
+            // Test employee names to remove
+            String[] testNames = {
+                "Test Employee",
+                "Alice Johnson",
+                "Bob Smith",
+                "Carol Davis",
+                "David Wilson"
+            };
+            
+            // Find all test users
+            List<User> testUsers = userRepository.findAll().stream()
+                .filter(u -> {
+                    for (String name : testNames) {
+                        if (u.getName().equalsIgnoreCase(name)) {
+                            return true;
+                        }
+                    }
+                    // Also filter by email pattern
+                    if (u.getEmail() != null && u.getEmail().contains("@test.com")) {
+                        return true;
+                    }
+                    // Filter placeholder emails (except imported.local)
+                    if (u.getEmail() != null && u.getEmail().contains("employee") 
+                        && !u.getEmail().contains("@imported.local")) {
+                        return true;
+                    }
+                    return false;
+                })
+                .toList();
+            
+            if (!testUsers.isEmpty()) {
+                log.info("Found {} test users to delete", testUsers.size());
+                
+                // Delete the users (cascade should handle related data)
+                userRepository.deleteAll(testUsers);
+                log.info("Deleted {} test users and their associated data", testUsers.size());
             }
-            String email = emailFor(name);
-            if (userRepository.findByEmailIgnoreCase(email).isPresent()) {
-                continue;
-            }
-
-            User user = User.builder()
-                .name(name)
-                .email(email)
-                .password(passwordEncoder.encode(DEFAULT_PASSWORD))
-                .department(DEPARTMENT)
-                .professionalRole(ROLE)
-                .role(UserRole.USER)
-                .employeeStatus(EmployeeStatus.ACTIVE)
-                .employmentType(EmploymentType.FULL_TIME)
-                .isActive(true)
-                .build();
-            userRepository.save(user);
-            log.info("Seeded ASE member '{}' ({})", name, email);
+        } catch (Exception e) {
+            log.warn("Error during test data cleanup: {}", e.getMessage());
         }
     }
 

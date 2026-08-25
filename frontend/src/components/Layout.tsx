@@ -12,6 +12,7 @@ const SIDEBAR_KEY = 'dinacharya-sidebar-open';
 
 const ADMIN_LINKS = [
   { to: '/tasks', label: 'Tasks', icon: 'assignment' },
+  { to: '/task-analytics', label: 'Task Analytics', icon: 'bar_chart' },
   { to: '/performance', label: 'Performance', icon: 'monitoring' },
   { to: '/moderator', label: 'Moderation', icon: 'shield' },
   { to: '/people', label: 'People', icon: 'badge' },
@@ -72,6 +73,7 @@ export default function Layout() {
   const isActive = (path: string) => {
     if (path === '/teams') return location.pathname.startsWith('/teams');
     if (path === '/performance') return location.pathname.startsWith('/performance');
+    if (path === '/task-analytics') return location.pathname === '/task-analytics';
     if (path.startsWith('/attendance')) return location.pathname.startsWith('/attendance');
     return location.pathname === path;
   };

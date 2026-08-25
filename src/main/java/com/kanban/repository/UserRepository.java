@@ -66,7 +66,7 @@ public interface UserRepository extends JpaRepository<User, UUID> {
     @Query("""
         SELECT u FROM User u
         WHERE u.isActive = true
-        AND u.role IN ('MEMBER', 'TEAM_LEAD')
+        AND u.role = 'USER'
         AND (:department IS NULL OR u.department = :department)
         ORDER BY u.name ASC
         """)

@@ -18,6 +18,7 @@ import EmployeeDashboard from './pages/EmployeeDashboard';
 import EmployeePerformance from './pages/EmployeePerformance';
 import EmployeePerformanceDetail from './pages/EmployeePerformanceDetail';
 import EmployeeAttendanceDashboard from './pages/EmployeeAttendanceDashboard';
+import TaskAnalytics from './pages/TaskAnalytics';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore((state) => state.isAuthenticated());
@@ -118,6 +119,14 @@ function App() {
           element={
             <AdminRoute>
               <Analytics />
+            </AdminRoute>
+          }
+        />
+        <Route
+          path="task-analytics"
+          element={
+            <AdminRoute>
+              <TaskAnalytics />
             </AdminRoute>
           }
         />

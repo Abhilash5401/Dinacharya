@@ -358,3 +358,62 @@ export interface Page<T> {
   size: number;
   number: number;
 }
+
+
+// Task Completion Analytics types
+export interface TaskCompletionAnalytics {
+  periodStart: string;
+  periodEnd: string;
+  totalTasks: number;
+  completedTasks: number;
+  inProgressTasks: number;
+  todoTasks: number;
+  inReviewTasks: number;
+  completionRate: number;
+  onTimeRate: number;
+  overdueTasks: number;
+  avgCompletionTimeHours?: number;
+  avgTimeInProgressHours?: number;
+  byStatus: StatusBreakdown[];
+  byPriority: PriorityBreakdown[];
+  byAssignee: AssigneeBreakdown[];
+  dailyTrend: DailyTrend[];
+  weeklyTrend: WeeklyTrend[];
+}
+
+export interface StatusBreakdown {
+  status: string;
+  count: number;
+  percentage: number;
+}
+
+export interface PriorityBreakdown {
+  priority: string;
+  total: number;
+  completed: number;
+  completionRate: number;
+}
+
+export interface AssigneeBreakdown {
+  userId: string;
+  userName: string;
+  assigned: number;
+  completed: number;
+  completionRate: number;
+  overdue: number;
+}
+
+export interface DailyTrend {
+  date: string;
+  created: number;
+  completed: number;
+  netChange: number;
+}
+
+export interface WeeklyTrend {
+  weekStart: string;
+  weekLabel: string;
+  created: number;
+  completed: number;
+  completionRate: number;
+}

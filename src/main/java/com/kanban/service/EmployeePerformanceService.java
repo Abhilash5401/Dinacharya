@@ -14,6 +14,8 @@ import com.kanban.repository.EmployeePerformanceSnapshotRepository;
 import com.kanban.repository.TaskRepository;
 import com.kanban.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -31,6 +33,7 @@ import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
+@Slf4j
 public class EmployeePerformanceService {
 
     private static final double PRODUCTIVITY_WEIGHT = 0.4;
@@ -98,6 +101,18 @@ public class EmployeePerformanceService {
         LocalDate today = LocalDate.now();
         LocalDate periodStart = today.with(TemporalAdjusters.firstDayOfMonth());
         computeSnapshotsForPeriod(periodStart, today);
+    }
+
+    @Scheduled(cron = "0 0 1 * * *")
+    @Transactional
+    public void scheduleMonthlyPerformanceComputation() {
+        try {
+            log.info("Starting scheduled monthly performance computation");
+            computeCurrentMonthSnapshots();
+            log.info("Monthly performance computation completed successfully");
+        } catch (Exception e) {
+            log.error("Error during scheduled monthly performance computation", e);
+        }
     }
 
     @Transactional
