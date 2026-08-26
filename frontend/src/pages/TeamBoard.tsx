@@ -1,7 +1,6 @@
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useTasks } from '@/hooks/useTasks';
 import { useTeam, useDeleteTeam } from '@/hooks/useTeams';
-import { useWebSocket } from '@/hooks/useWebSocket';
 import { useState } from 'react';
 import KanbanBoard from '@/components/KanbanBoard';
 import CreateTaskModal from '@/components/CreateTaskModal';
@@ -19,8 +18,6 @@ export default function TeamBoard() {
   );
   const deleteTeam = useDeleteTeam();
   const user = useAuthStore((state) => state.user);
-  
-  useWebSocket(teamId);
 
   if (isLoading || !team) {
     return (
