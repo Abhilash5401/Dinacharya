@@ -297,4 +297,5 @@ public class UserService {
         value = value.trim();
         return StringUtils.hasText(value) ? value : null;
     }
+
 }

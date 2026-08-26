@@ -319,28 +319,10 @@ public class FileImportServiceImpl implements FileImportService {
                     importedTasks.add(createdTask);
                     successCount++;
                     log.info("Created task: {} for employee {}", taskData.getTitle(), taskData.getEmployeeName());
-                }
-
-                // Map login/logout/attendance into both time_entries and attendance_records
-                // so the moderator attendance dashboard can show imported sheets.
-                if (assigneeId != null && taskData.getDueDate() != null) {
-                    try {
-                        createTimeEntryFromTaskData(taskData, assigneeId);
-                        upsertAttendanceRecord(taskData, assigneeId);
-                        if (isAttendanceOnly) {
-                            successCount++;
-                        }
-                        log.info("Mapped attendance for user on date {}", taskData.getDueDate());
-                    } catch (Exception timeEx) {
-                        log.warn("Failed to map attendance for row {}: {}", taskData.getRowNumber(), timeEx.getMessage());
-                        if (isAttendanceOnly) {
-                            failureCount++;
-                            errors.add(String.format("Row %d: %s", taskData.getRowNumber(), timeEx.getMessage()));
-                        }
-                    }
-                } else if (isAttendanceOnly) {
-                    failureCount++;
-                    errors.add(String.format("Row %d: Could not map attendance (missing employee or date)", taskData.getRowNumber()));
+                } else {
+                    // Skip attendance-only rows - just create tasks, not attendance records
+                    log.info("Skipping attendance-only row: {}", taskData.getRowNumber());
+                    continue;
                 }
 
             } catch (Exception e) {

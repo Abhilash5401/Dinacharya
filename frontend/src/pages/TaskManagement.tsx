@@ -22,7 +22,7 @@ interface TaskFormState {
 const EMPTY_FORM: TaskFormState = {
   assignedToId: '',
   department: '',
-  deadline: '',
+  deadline: '',  // Will be set dynamically
   title: '',
   description: '',
   priority: TaskPriority.MEDIUM,
@@ -67,7 +67,11 @@ function formatDate(value?: string) {
 
 function formatDateKey(value?: string) {
   if (!value) return '';
-  return new Date(value).toISOString().split('T')[0];
+  const date = new Date(value);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 }
 
 function priorityBadgeClass(priority: TaskPriority) {
@@ -118,15 +122,24 @@ function uniqueUsers(users: User[]) {
   });
 }
 
+// Helper to get today's date in YYYY-MM-DD format (local timezone)
+function getTodayDate() {
+  const today = new Date();
+  const year = today.getFullYear();
+  const month = String(today.getMonth() + 1).padStart(2, '0');
+  const day = String(today.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 export default function TaskManagement() {
   const user = useAuthStore((s) => s.user);
   const location = useLocation();
   const isModerator = user?.role === 'MODERATOR' || user?.role === 'ADMIN';
 
-  const [form, setForm] = useState<TaskFormState>(EMPTY_FORM);
+  const [form, setForm] = useState<TaskFormState>({ ...EMPTY_FORM, deadline: getTodayDate() });
   const [filterEmployee, setFilterEmployee] = useState('');
   const [filterDepartment, setFilterDepartment] = useState('');
-  const [filterDate, setFilterDate] = useState('');
+  const [filterDate, setFilterDate] = useState(getTodayDate());  // Default to today
   const [filterStatus, setFilterStatus] = useState('');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
@@ -271,6 +284,7 @@ export default function TaskManagement() {
       setForm({
         ...EMPTY_FORM,
         teamId,
+        deadline: getTodayDate(),
         priority: TaskPriority.MEDIUM,
         status: TaskStatus.TODO,
       });
