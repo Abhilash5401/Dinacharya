@@ -80,8 +80,11 @@ jobs:
           host: ${{ secrets.EC2_HOST }}
           username: ${{ secrets.EC2_USERNAME }}
           key: ${{ secrets.EC2_SSH_KEY }}
+          timeout: 30m
+          command_timeout: 25m
           script: |
             cd ~/Dinacharya
-            docker compose pull
-            docker compose up -d
+            git pull
+            docker compose down
+            docker compose up -d --build
             docker system prune -f
