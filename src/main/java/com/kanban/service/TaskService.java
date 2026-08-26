@@ -14,7 +14,6 @@ import com.kanban.model.enums.TaskPriority;
 import com.kanban.model.enums.TaskStatus;
 import com.kanban.model.enums.UserRole;
 import com.kanban.repository.TaskRepository;
-import com.kanban.websocket.WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -39,7 +38,6 @@ public class TaskService {
     private final UserService userService;
     private final TeamService teamService;
     private final AuditService auditService;
-    private final WebSocketEventPublisher webSocketEventPublisher;
     private final EmailService emailService;
 
     @Transactional(readOnly = true)
@@ -126,12 +124,9 @@ public class TaskService {
         task = taskRepository.save(task);
         auditService.logTaskCreated(createdById, task.getId(), task.getTitle());
 
-        TaskResponse response = taskMapper.toResponse(task);
-        webSocketEventPublisher.publishTaskCreated(team.getId(), response);
-        webSocketEventPublisher.publishTaskAssigned(response);
         notifyAssigneeAfterCommit(task);
 
-        return response;
+        return taskMapper.toResponse(task);
     }
 
     @Transactional
@@ -172,14 +167,11 @@ public class TaskService {
 
         auditService.logTaskUpdated(currentUserId, task.getId(), changes);
 
-        TaskResponse response = taskMapper.toResponse(task);
-        webSocketEventPublisher.publishTaskUpdated(task.getTeam().getId(), response);
         if (request.getAssignedToId() != null && !request.getAssignedToId().equals(previousAssigneeId)) {
-            webSocketEventPublisher.publishTaskAssigned(response);
             notifyAssigneeAfterCommit(task);
         }
 
-        return response;
+        return taskMapper.toResponse(task);
     }
 
     @Transactional
@@ -206,10 +198,7 @@ public class TaskService {
 
         auditService.logTaskStatusChanged(currentUserId, task.getId(), oldStatus.name(), newStatus.name());
 
-        TaskResponse response = taskMapper.toResponse(task);
-        webSocketEventPublisher.publishTaskUpdated(task.getTeam().getId(), response);
-
-        return response;
+        return taskMapper.toResponse(task);
     }
 
     @Transactional
@@ -230,13 +219,9 @@ public class TaskService {
         }
 
         auditService.logTaskAssigned(currentUserId, task.getId(), assigneeId);
-
-        TaskResponse response = taskMapper.toResponse(task);
-        webSocketEventPublisher.publishTaskUpdated(task.getTeam().getId(), response);
-        webSocketEventPublisher.publishTaskAssigned(response);
         notifyAssigneeAfterCommit(task);
 
-        return response;
+        return taskMapper.toResponse(task);
     }
 
     @Transactional
@@ -261,8 +246,6 @@ public class TaskService {
 
         taskRepository.delete(task);
         auditService.logTaskDeleted(currentUserId, id, taskTitle);
-
-        webSocketEventPublisher.publishTaskDeleted(teamId, id);
     }
 
     @Transactional
@@ -285,7 +268,6 @@ public class TaskService {
             taskRepository.deleteAll(tasks);
             auditService.logAction(currentUserId, com.kanban.model.enums.AuditAction.DELETE, "Task", teamId, 
                 java.util.Map.of("event", "delete_all_in_team", "count", deletedCount));
-            webSocketEventPublisher.publishTeamTasksCleared(teamId, deletedCount);
         } else {
             // Delete ALL tasks in the system
             java.util.List<Task> allTasks = taskRepository.findAll();
@@ -298,9 +280,6 @@ public class TaskService {
             taskRepository.deleteAll(allTasks);
             auditService.logAction(currentUserId, com.kanban.model.enums.AuditAction.DELETE, "Task", currentUserId, 
                 java.util.Map.of("event", "delete_all_system", "count", deletedCount));
-            for (UUID teamId2 : affectedTeams) {
-                webSocketEventPublisher.publishTeamTasksCleared(teamId2, deletedCount);
-            }
         }
         return deletedCount;
     }

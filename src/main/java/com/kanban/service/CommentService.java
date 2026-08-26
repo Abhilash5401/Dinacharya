@@ -10,7 +10,6 @@ import com.kanban.model.entity.Task;
 import com.kanban.model.entity.User;
 import com.kanban.model.enums.UserRole;
 import com.kanban.repository.CommentRepository;
-import com.kanban.websocket.WebSocketEventPublisher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,7 +29,6 @@ public class CommentService {
     private final UserService userService;
     private final TaskService taskService;
     private final AuditService auditService;
-    private final WebSocketEventPublisher webSocketEventPublisher;
 
     public Set<CommentResponse> getCommentsByTask(UUID taskId) {
         Task task = taskService.getTaskEntityById(taskId);
@@ -70,10 +68,7 @@ public class CommentService {
         comment = commentRepository.save(comment);
         auditService.logCommentAdded(authorId, comment.getId(), taskId);
 
-        CommentResponse response = commentMapper.toResponse(comment);
-        webSocketEventPublisher.publishCommentAdded(task.getTeam().getId(), taskId, response);
-
-        return response;
+        return commentMapper.toResponse(comment);
     }
 
     @Transactional
@@ -90,11 +85,7 @@ public class CommentService {
             throw new UnauthorizedException("You don't have permission to delete this comment");
         }
 
-        UUID taskId = comment.getTask().getId();
-        UUID teamId = comment.getTask().getTeam().getId();
-
         commentRepository.delete(comment);
-        webSocketEventPublisher.publishCommentDeleted(teamId, taskId, id);
     }
 
     @Transactional
