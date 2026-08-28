@@ -7,8 +7,6 @@ services:
     envVars:
       - key: SPRING_PROFILES_ACTIVE
         value: prod
-      - key: SERVER_PORT
-        value: 8080
       - key: DB_HOST
         sync: false
       - key: DB_PORT
@@ -19,9 +17,17 @@ services:
         sync: false
       - key: DB_PASSWORD
         sync: false
+      - key: DB_USE_SSL
+        value: "true"
       - key: JWT_SECRET
         generateValue: true
       - key: FRONTEND_URL
         sync: false
       - key: CORS_ALLOWED_ORIGINS
+        sync: false
+      - key: ADMIN_ENABLED
+        value: "true"
+      - key: ADMIN_EMAIL
+        sync: false
+      - key: ADMIN_PASSWORD
         sync: false
