@@ -41,6 +41,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -508,6 +509,8 @@ public class FileImportServiceImpl implements FileImportService {
         if (name.isEmpty()) {
             return null;
         }
+        // Normalise the department to the canonical casing before saving.
+        String normalisedDept = normaliseDepartment(department);
         String email = buildEmployeeEmail(name);
 
         User user = User.builder()
@@ -515,7 +518,7 @@ public class FileImportServiceImpl implements FileImportService {
                 .password(passwordEncoder.encode(UUID.randomUUID().toString()))
                 .name(name)
                 .role(UserRole.USER)
-                .department((department != null && !department.isBlank()) ? department.trim() : null)
+                .department((normalisedDept != null && !normalisedDept.isBlank()) ? normalisedDept : null)
                 .isActive(true)
                 .lastActive(LocalDateTime.now())
                 .build();
@@ -523,6 +526,25 @@ public class FileImportServiceImpl implements FileImportService {
         User saved = userRepository.save(user);
         log.info("Auto-created employee '{}' ({}) from tasksheet import", name, email);
         return saved;
+    }
+
+    /** Returns the canonical department name for a raw value, or the original trimmed value if unknown. */
+    private static String normaliseDepartment(String raw) {
+        if (raw == null || raw.isBlank()) return null;
+        Map<String, String> map = Map.ofEntries(
+            Map.entry("ase",                  "ASE"),
+            Map.entry("business development", "Business Development"),
+            Map.entry("cybersecurity",        "Cybersecurity"),
+            Map.entry("devops",               "DevOps"),
+            Map.entry("dev",                  "Dev"),
+            Map.entry("engineering",          "Engineering"),
+            Map.entry("ui",                   "UI"),
+            Map.entry("uiux",                 "UI"),
+            Map.entry("ui/ux",                "UI"),
+            Map.entry("ui ux",                "UI")
+        );
+        String canonical = map.get(raw.toLowerCase().trim());
+        return canonical != null ? canonical : raw.trim();
     }
 
     /** Builds a unique, deterministic email from an employee name, e.g. "Akkipalli Sri Usha" -> akkipalli.sri.usha@imported.local */
@@ -653,8 +675,34 @@ public class FileImportServiceImpl implements FileImportService {
         if (name.isEmpty()) {
             return null;
         }
-        String cleaned = name.replaceFirst("(?i)^ASE\\s+", "").trim();
 
+        // Strip any known department prefix (e.g. "CyberSecurity karthik" -> "karthik",
+        // "ASE Pattima kalyani" -> "Pattima kalyani", "devops Bob" -> "Bob").
+        // Keys are lower-cased; values are the canonical department name.
+        Map<String, String> departmentPrefixes = Map.ofEntries(
+            Map.entry("ase",                  "ASE"),
+            Map.entry("business development", "Business Development"),
+            Map.entry("cybersecurity",        "Cybersecurity"),
+            Map.entry("devops",               "DevOps"),
+            Map.entry("dev",                  "Dev"),
+            Map.entry("engineering",          "Engineering"),
+            Map.entry("ui",                   "UI"),
+            Map.entry("uiux",                 "UI"),
+            Map.entry("ui/ux",                "UI"),
+            Map.entry("ui ux",                "UI")
+        );
+        String cleaned = name;
+        String detectedDepartment = null;
+        for (Map.Entry<String, String> entry : departmentPrefixes.entrySet()) {
+            String key = entry.getKey();
+            if (name.toLowerCase().startsWith(key + " ")) {
+                cleaned = name.substring(key.length() + 1).trim();
+                detectedDepartment = entry.getValue();
+                break;
+            }
+        }
+
+        // Try exact name first, then the cleaned variant.
         User user = userRepository.findByNameIgnoreCase(name).orElse(null);
         if (user == null && !cleaned.equalsIgnoreCase(name)) {
             user = userRepository.findByNameIgnoreCase(cleaned).orElse(null);

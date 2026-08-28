@@ -218,7 +218,14 @@ public class EmployeePerformanceService {
     }
 
     RawScores calculateRawScores(User employee, LocalDate periodStart, LocalDate periodEnd) {
-        LocalDateTime start = periodStart.atStartOfDay();
+        // Clamp period start to the employee's joining date so working-day count only
+        // includes days from when they actually started — not before their onboarding.
+        LocalDate joiningDate = employee.getJoiningDate() != null
+            ? employee.getJoiningDate()
+            : employee.getCreatedAt().toLocalDate();
+        LocalDate effectiveStart = joiningDate.isAfter(periodStart) ? joiningDate : periodStart;
+
+        LocalDateTime start = effectiveStart.atStartOfDay();
         LocalDateTime endExclusive = periodEnd.plusDays(1).atStartOfDay();
 
         List<Task> completedTasks = taskRepository.findCompletedTasksForUserInPeriod(
@@ -257,7 +264,7 @@ public class EmployeePerformanceService {
 
         List<AttendanceRecord> attendance = attendanceRecordRepository.findByUserIdAndWorkDateBetween(
             employee.getId(),
-            periodStart,
+            effectiveStart,
             periodEnd
         );
         int attendanceDays = (int) attendance.stream()
@@ -272,7 +279,7 @@ public class EmployeePerformanceService {
             tasksAssigned,
             onTimeTasks,
             attendanceDays,
-            workingDaysBetween(periodStart, periodEnd).size()
+            workingDaysBetween(effectiveStart, periodEnd).size()
         );
     }
 

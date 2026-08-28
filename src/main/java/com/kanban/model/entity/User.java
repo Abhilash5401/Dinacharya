@@ -8,6 +8,7 @@ import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.*;
 
@@ -70,6 +71,14 @@ public class User {
 
     @Column
     private LocalDateTime lastActive;
+
+    /**
+     * The date the employee officially joined. Used as the effective start of all
+     * attendance and performance calculations so metrics aren't inflated by days
+     * before they were onboarded. Defaults to DATE(created_at) via a startup backfill.
+     */
+    @Column(name = "joining_date")
+    private LocalDate joiningDate;
 
     @CreationTimestamp
     @Column(nullable = false, updatable = false)

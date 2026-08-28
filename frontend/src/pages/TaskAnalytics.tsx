@@ -16,7 +16,7 @@ import {
   YAxis,
 } from 'recharts';
 import { useTaskCompletionAnalytics } from '@/hooks/useTaskAnalytics';
-import { useTeams } from '@/hooks/useTeams';
+import { useDepartments } from '@/hooks/useUsers';
 
 function toLocalIsoDate(date: Date) {
   const year = date.getFullYear();
@@ -50,11 +50,10 @@ export default function TaskAnalyticsPage() {
   const range = useMemo(() => defaultRange(), []);
   const [from, setFrom] = useState(range.from);
   const [to, setTo] = useState(range.to);
-  const [teamId, setTeamId] = useState<string>('');
+  const [department, setDepartment] = useState('');
 
-  const { data: teamsPage } = useTeams();
-  const teams = teamsPage?.content ?? [];
-  const { data: analytics, isLoading } = useTaskCompletionAnalytics(from, to, teamId || undefined);
+  const { data: departmentsList = [] } = useDepartments();
+  const { data: analytics, isLoading } = useTaskCompletionAnalytics(from, to, department || undefined);
 
   const statusData = useMemo(() => {
     if (!analytics) return [];
@@ -135,14 +134,12 @@ export default function TaskAnalyticsPage() {
           />
           <select
             className="input-field min-w-[160px]"
-            value={teamId}
-            onChange={(e) => setTeamId(e.target.value)}
+            value={department}
+            onChange={(e) => setDepartment(e.target.value)}
           >
-            <option value="">All teams</option>
-            {teams.map((team) => (
-              <option key={team.id} value={team.id}>
-                {team.name}
-              </option>
+            <option value="">All departments</option>
+            {departmentsList.map((dept) => (
+              <option key={dept} value={dept}>{dept}</option>
             ))}
           </select>
         </div>
@@ -485,7 +482,7 @@ export default function TaskAnalyticsPage() {
             No task assignments found for this period.
           </p>
           <p className="text-sm text-charcoal-muted mt-1">
-            Try adjusting the date range or team filter.
+            Try adjusting the date range.
           </p>
         </div>
       )}

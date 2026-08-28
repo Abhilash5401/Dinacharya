@@ -6,11 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
-import Dashboard from './pages/Dashboard';
-import TeamBoard from './pages/TeamBoard';
 import Profile from './pages/Profile';
-import TeamSettings from './pages/TeamSettings';
-import Analytics from './pages/Analytics';
 import ModeratorPanel from './pages/ModeratorPanel';
 import TaskManagement from './pages/TaskManagement';
 import TeamPeople from './pages/TeamPeople';
@@ -87,38 +83,6 @@ function App() {
           element={
             <AdminRoute>
               <TeamPeople />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="teams"
-          element={
-            <AdminRoute>
-              <Dashboard />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="teams/:teamId"
-          element={
-            <AdminRoute>
-              <TeamBoard />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="teams/:teamId/settings"
-          element={
-            <AdminRoute>
-              <TeamSettings />
-            </AdminRoute>
-          }
-        />
-        <Route
-          path="teams/:teamId/analytics"
-          element={
-            <AdminRoute>
-              <Analytics />
             </AdminRoute>
           }
         />

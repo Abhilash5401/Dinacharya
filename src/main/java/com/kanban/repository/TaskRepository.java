@@ -128,8 +128,8 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
         SELECT t FROM Task t
         WHERE t.assignedTo.id = :userId
         AND t.status = 'DONE'
-        AND t.updatedAt >= :start
-        AND t.updatedAt < :endExclusive
+        AND t.completedAt >= :start
+        AND t.completedAt < :endExclusive
         """)
     List<Task> findCompletedTasksForUserInPeriod(
         @Param("userId") UUID userId,
@@ -142,7 +142,7 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
         WHERE t.assignedTo.id = :userId
         AND (
             (t.status <> 'DONE' AND t.createdAt < :endExclusive)
-            OR (t.status = 'DONE' AND t.updatedAt >= :start AND t.updatedAt < :endExclusive)
+            OR (t.status = 'DONE' AND t.completedAt >= :start AND t.completedAt < :endExclusive)
         )
         """)
     List<Task> findAssignedTasksForCompletionInPeriod(
@@ -154,6 +154,11 @@ public interface TaskRepository extends JpaRepository<Task, UUID> {
     @Modifying
     @Query("UPDATE Task t SET t.assignedTo = null WHERE t.assignedTo.id = :userId")
     int clearAssignee(@Param("userId") UUID userId);
+
+    void deleteByAssignedTo_Id(UUID userId);
+
+    @Query("SELECT DISTINCT t FROM Task t WHERE t.assignedTo.department = :department")
+    List<Task> findByAssignedTo_Department(@Param("department") String department);
 
     @Modifying
     @Query("UPDATE Task t SET t.createdBy = :replacement WHERE t.createdBy.id = :userId")

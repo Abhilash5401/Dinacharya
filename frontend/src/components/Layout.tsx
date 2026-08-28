@@ -13,7 +13,6 @@ const ADMIN_LINKS = [
   { to: '/performance', label: 'Performance', icon: 'monitoring' },
   { to: '/moderator', label: 'Moderation', icon: 'shield' },
   { to: '/people', label: 'People', icon: 'badge' },
-  { to: '/teams', label: 'Teams', icon: 'group' },
   { to: '/profile', label: 'Profile', icon: 'person' },
 ] as const;
 
@@ -58,7 +57,6 @@ export default function Layout() {
   };
 
   const isActive = (path: string) => {
-    if (path === '/teams') return location.pathname.startsWith('/teams');
     if (path === '/performance') return location.pathname.startsWith('/performance');
     if (path === '/task-analytics') return location.pathname === '/task-analytics';
     if (path.startsWith('/attendance')) return location.pathname.startsWith('/attendance');

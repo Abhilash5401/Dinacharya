@@ -12,7 +12,6 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.LocalDate;
-import java.util.UUID;
 
 @RestController
 @RequestMapping("/analytics/tasks")
@@ -30,8 +29,8 @@ public class TaskCompletionAnalyticsController {
     public ResponseEntity<TaskCompletionAnalyticsResponse> getAnalytics(
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate from,
         @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate to,
-        @RequestParam(required = false) UUID teamId
+        @RequestParam(required = false) String department
     ) {
-        return ResponseEntity.ok(analyticsService.getAnalytics(from, to, teamId));
+        return ResponseEntity.ok(analyticsService.getAnalytics(from, to, department));
     }
 }

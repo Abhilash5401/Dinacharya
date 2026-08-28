@@ -1,5 +1,5 @@
 import { useMemo, useState, useEffect } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/authStore';
 import { useTasks, useCreateTask, useUpdateTask, useUpdateTaskStatus, useDeleteTask, useDeleteAllTasks } from '@/hooks/useTasks';
 import { useUsers, useDepartments } from '@/hooks/useUsers';
@@ -341,7 +341,7 @@ export default function TaskManagement() {
         </div>
 
         {/* Task Import Section */}
-        {teams.length > 0 && selectedTeamId && (
+        {selectedTeamId && (
           <section className="tms-panel">
             <div className="flex justify-between items-center mb-4">
               <h2 className="tms-panel-title">Import Tasks</h2>
@@ -373,15 +373,6 @@ export default function TaskManagement() {
 
         <section id="new-task-form" className="tms-panel">
           <h2 className="tms-panel-title">Add New Task</h2>
-          {teams.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-charcoal-muted mb-4">You need at least one team before adding tasks.</p>
-              <Link to="/teams" className="btn btn-primary inline-flex items-center gap-2">
-                <span className="material-symbols-outlined text-[18px]">group_add</span>
-                Go to Teams
-              </Link>
-            </div>
-          ) : (
           <form onSubmit={handleAddTask} className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <label className="tms-label">Department</label>
@@ -420,21 +411,7 @@ export default function TaskManagement() {
                 onChange={(e) => handleFormChange('deadline', e.target.value)}
               />
             </div>
-            {teams.length > 1 && (
-              <div>
-                <label className="tms-label">Team</label>
-                <select
-                  className="input"
-                  value={form.teamId || selectedTeamId}
-                  onChange={(e) => handleFormChange('teamId', e.target.value)}
-                >
-                  {teams.map((t) => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
-            <div className={teams.length > 1 ? '' : 'md:col-span-2'}>
+            <div className="md:col-span-2">
               <label className="tms-label">Task Title</label>
               <input
                 id="new-task-title"
@@ -485,7 +462,6 @@ export default function TaskManagement() {
               </button>
             </div>
           </form>
-          )}
         </section>
 
         <div className="flex flex-wrap gap-3">

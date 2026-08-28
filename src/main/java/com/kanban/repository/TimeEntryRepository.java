@@ -33,4 +33,6 @@ public interface TimeEntryRepository extends JpaRepository<TimeEntry, UUID> {
 
     @Query("SELECT SUM(t.breakDurationMinutes) FROM TimeEntry t WHERE t.user.id = :userId AND t.entryDate = :date")
     Integer calculateTotalBreaks(@Param("userId") UUID userId, @Param("date") LocalDate date);
+
+    void deleteByUser_Id(UUID userId);
 }

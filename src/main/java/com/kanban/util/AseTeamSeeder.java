@@ -112,7 +112,7 @@ public class AseTeamSeeder implements ApplicationRunner {
             };
             
             // Find all test users
-            List<User> testUsers = userRepository.findAll().stream()
+            List<User> testUsers = userRepository.findAllDistinct().stream()
                 .filter(u -> {
                     for (String name : testNames) {
                         if (u.getName().equalsIgnoreCase(name)) {

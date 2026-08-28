@@ -3,9 +3,11 @@ package com.kanban.service;
 import com.kanban.model.dto.response.TaskCompletionAnalyticsResponse;
 import com.kanban.model.dto.response.TaskCompletionAnalyticsResponse.*;
 import com.kanban.model.entity.Task;
+import com.kanban.model.entity.User;
 import com.kanban.model.enums.TaskPriority;
 import com.kanban.model.enums.TaskStatus;
 import com.kanban.repository.TaskRepository;
+import com.kanban.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -25,14 +27,15 @@ import java.util.stream.Collectors;
 public class TaskCompletionAnalyticsService {
 
     private final TaskRepository taskRepository;
+    private final UserRepository userRepository;
 
     @Transactional(readOnly = true)
-    public TaskCompletionAnalyticsResponse getAnalytics(LocalDate from, LocalDate to, UUID teamId) {
+    public TaskCompletionAnalyticsResponse getAnalytics(LocalDate from, LocalDate to, String department) {
         LocalDate periodStart = from != null ? from : LocalDate.now().minusDays(30);
         LocalDate periodEnd = to != null ? to : LocalDate.now();
 
-        List<Task> allTasks = teamId != null
-            ? taskRepository.findByTeamId(teamId)
+        List<Task> allTasks = (department != null && !department.isBlank())
+            ? taskRepository.findByAssignedTo_Department(department)
             : taskRepository.findAll();
 
         // Filter tasks relevant to the period (created before period end)
@@ -84,7 +87,7 @@ public class TaskCompletionAnalyticsService {
         // Breakdowns
         List<StatusBreakdown> byStatus = calculateStatusBreakdown(periodTasks, totalTasks);
         List<PriorityBreakdown> byPriority = calculatePriorityBreakdown(periodTasks);
-        List<AssigneeBreakdown> byAssignee = calculateAssigneeBreakdown(periodTasks, now);
+        List<AssigneeBreakdown> byAssignee = calculateAssigneeBreakdown(periodTasks, now, department);
         List<DailyTrend> dailyTrend = calculateDailyTrend(allTasks, periodStart, periodEnd);
         List<WeeklyTrend> weeklyTrend = calculateWeeklyTrend(allTasks, periodStart, periodEnd);
 
@@ -164,17 +167,21 @@ public class TaskCompletionAnalyticsService {
             .toList();
     }
 
-    private List<AssigneeBreakdown> calculateAssigneeBreakdown(List<Task> tasks, LocalDateTime now) {
+    private List<AssigneeBreakdown> calculateAssigneeBreakdown(List<Task> tasks, LocalDateTime now, String department) {
+        // Build a task map keyed by assignee id.
         Map<UUID, List<Task>> byAssignee = tasks.stream()
             .filter(t -> t.getAssignedTo() != null)
             .collect(Collectors.groupingBy(t -> t.getAssignedTo().getId()));
 
-        return byAssignee.entrySet().stream()
-            .map(entry -> {
-                UUID userId = entry.getKey();
-                List<Task> userTasks = entry.getValue();
-                String userName = userTasks.get(0).getAssignedTo().getName();
+        // Load ALL active employees (filtered by department if set) so employees with
+        // zero tasks still appear in the breakdown rather than being silently omitted.
+        List<User> employees = userRepository.findActiveEmployees(
+            (department != null && !department.isBlank()) ? department : null
+        );
 
+        return employees.stream()
+            .map(user -> {
+                List<Task> userTasks = byAssignee.getOrDefault(user.getId(), List.of());
                 int assigned = userTasks.size();
                 int completed = (int) userTasks.stream()
                     .filter(t -> t.getStatus() == TaskStatus.DONE)
@@ -187,8 +194,8 @@ public class TaskCompletionAnalyticsService {
                 double rate = assigned > 0 ? round((completed * 100.0) / assigned) : 0;
 
                 return AssigneeBreakdown.builder()
-                    .userId(userId.toString())
-                    .userName(userName)
+                    .userId(user.getId().toString())
+                    .userName(user.getName())
                     .assigned(assigned)
                     .completed(completed)
                     .completionRate(rate)

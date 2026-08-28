@@ -233,7 +233,7 @@ export default function EmployeePerformanceDetail() {
                   >
                     <div className="min-w-0 flex-1">
                       <p className="text-sm font-medium text-charcoal truncate">{task.title}</p>
-                      <p className="text-xs text-charcoal-muted">{task.teamName}</p>
+                      <p className="text-xs text-charcoal-muted">{task.assignedTo?.department || '—'}</p>
                     </div>
                     <span
                       className={`shrink-0 px-2 py-0.5 rounded text-xs font-medium ${

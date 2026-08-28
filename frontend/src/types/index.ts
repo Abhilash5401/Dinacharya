@@ -56,6 +56,7 @@ export interface User {
   employmentType?: EmploymentType;
   isActive: boolean;
   lastActive?: string;
+  joiningDate?: string;   // ISO date string YYYY-MM-DD
   createdAt: string;
   updatedAt: string;
   temporaryPassword?: string;
@@ -254,6 +255,7 @@ export interface CreateMemberRequest {
   department: string;
   professionalRole?: string;
   githubProfile?: string;
+  joiningDate?: string;   // ISO date YYYY-MM-DD
 }
 
 export interface UpdateMemberRequest {
@@ -262,6 +264,7 @@ export interface UpdateMemberRequest {
   githubProfile?: string;
   department?: string;
   employeeStatus?: EmployeeStatus;
+  joiningDate?: string;   // ISO date YYYY-MM-DD
 }
 
 export interface AttendanceFilters {

@@ -36,6 +36,14 @@ export default function Profile() {
             <p className="text-body-lg text-charcoal">{user.department}</p>
           </div>
         )}
+        {user.joiningDate && (
+          <div>
+            <label className="block text-label-md text-charcoal-muted mb-1">Joining Date</label>
+            <p className="text-body-lg text-charcoal">
+              {new Date(user.joiningDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'long', year: 'numeric' })}
+            </p>
+          </div>
+        )}
         {user.bio && (
           <div>
             <label className="block text-label-md text-charcoal-muted mb-1">Bio</label>
