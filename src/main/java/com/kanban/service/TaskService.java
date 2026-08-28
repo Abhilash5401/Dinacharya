@@ -91,6 +91,11 @@ public class TaskService {
 
     @Transactional
     public TaskResponse createTask(CreateTaskRequest request, UUID createdById) {
+        return createTask(request, createdById, true);
+    }
+
+    @Transactional
+    public TaskResponse createTask(CreateTaskRequest request, UUID createdById, boolean notifyAssignee) {
         User createdBy = userService.getUserEntityById(createdById);
         boolean isAdmin = createdBy.getRole() == UserRole.ADMIN;
         Team team;
@@ -124,7 +129,9 @@ public class TaskService {
         task = taskRepository.save(task);
         auditService.logTaskCreated(createdById, task.getId(), task.getTitle());
 
-        notifyAssigneeAfterCommit(task);
+        if (notifyAssignee) {
+            notifyAssigneeAfterCommit(task);
+        }
 
         return taskMapper.toResponse(task);
     }

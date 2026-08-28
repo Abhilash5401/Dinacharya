@@ -16,13 +16,32 @@ export default {
       const headers = new Headers(request.headers);
       headers.delete('host');
 
-      return fetch(target, {
+      const body =
+        request.method === 'GET' || request.method === 'HEAD'
+          ? undefined
+          : await request.arrayBuffer();
+
+      const init = {
         method: request.method,
         headers,
-        body: request.body,
+        body,
         redirect: 'follow',
-        duplex: 'half',
-      });
+      };
+
+      let response = await fetch(target, init);
+      // Do not retry POST/PUT: a second import would re-run the whole file and
+      // retry waits consume Cloudflare's 120s origin read timeout.
+      const idempotent = request.method === 'GET' || request.method === 'HEAD';
+      if (idempotent) {
+        for (let attempt = 0; attempt < 4; attempt++) {
+          if (response.status !== 503 && response.status !== 429) {
+            break;
+          }
+          await new Promise((resolve) => setTimeout(resolve, 4000));
+          response = await fetch(target, init);
+        }
+      }
+      return response;
     }
 
     return env.ASSETS.fetch(request);

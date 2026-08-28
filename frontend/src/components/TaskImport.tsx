@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Upload, FileSpreadsheet, FileText, Download, AlertCircle, CheckCircle, X } from 'lucide-react';
-import { apiClient } from '@/api/client';
+import { apiClient, IMPORT_API_URL } from '@/api/client';
 import { useTeams } from '@/hooks/useTeams';
 import { Team } from '@/types';
 
@@ -65,7 +65,8 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
 
       const response = await apiClient.post<TaskImportResponse>(
         `/import/tasks/${endpoint}/${resolvedTeamId}`,
-        formData
+        formData,
+        { baseURL: IMPORT_API_URL, timeout: 300000 }
       );
 
       const result = response.data;
@@ -77,12 +78,20 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       }
     } catch (error: any) {
       console.error('Import failed:', error);
+      const status = error.response?.status;
+      const rateLimited =
+        status === 429
+          ? 'Too many requests (HTTP 429). Wait 1–2 minutes, then try once.'
+          : status === 503
+            ? 'The live API is waking up or restarting (HTTP 503). Open https://dinacharya-ese5.onrender.com/api/v1/actuator/health, wait until it shows UP, then try again.'
+          : null;
       setImportResult({
         totalRows: 0,
         successCount: 0,
         failureCount: 1,
         errors: [
-          error.response?.data?.detail ||
+          rateLimited ||
+            error.response?.data?.detail ||
             error.response?.data?.message ||
             'Import failed: ' + error.message,
         ],

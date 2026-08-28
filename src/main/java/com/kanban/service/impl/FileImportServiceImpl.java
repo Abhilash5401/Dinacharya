@@ -42,6 +42,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.Date;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -60,7 +61,6 @@ public class FileImportServiceImpl implements FileImportService {
     private final AttendanceRecordRepository attendanceRecordRepository;
 
     @Override
-    @Transactional
     public TaskImportResponse importTasksFromExcel(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Excel import for team: {}", teamId);
 
@@ -80,7 +80,6 @@ public class FileImportServiceImpl implements FileImportService {
     }
 
     @Override
-    @Transactional
     public TaskImportResponse importTasksFromWord(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Word import for team: {}", teamId);
 
@@ -89,7 +88,6 @@ public class FileImportServiceImpl implements FileImportService {
     }
 
     @Override
-    @Transactional
     public TaskImportResponse importAttendanceSheet(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting attendance tasksheet import for team: {}", teamId);
 
@@ -256,10 +254,12 @@ public class FileImportServiceImpl implements FileImportService {
 
         User importer = userRepository.findById(userId)
                 .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+        Map<String, UUID> teamIdByDepartment = new HashMap<>();
+        Map<String, User> userByName = new HashMap<>();
 
         for (TaskImportData taskData : parsedTasks) {
             try {
-                UUID rowTeamId = resolveImportTeamId(taskData, teamId, importer);
+                UUID rowTeamId = resolveImportTeamId(taskData, teamId, importer, teamIdByDepartment);
                 // Find assignee: prefer email, then fall back to employee name (attendance sheets)
                 UUID assigneeId = null;
                 if (taskData.getAssigneeEmail() != null && !taskData.getAssigneeEmail().isEmpty()) {
@@ -274,9 +274,16 @@ public class FileImportServiceImpl implements FileImportService {
                 }
                 if (assigneeId == null && taskData.getEmployeeName() != null
                         && !taskData.getEmployeeName().isBlank()) {
-                    User assignee = resolveUserByName(taskData.getEmployeeName());
-                    if (assignee == null && autoCreateEmployees) {
-                        assignee = createEmployee(taskData.getEmployeeName(), taskData.getDepartment());
+                    String nameKey = taskData.getEmployeeName().trim().toLowerCase();
+                    User assignee = userByName.get(nameKey);
+                    if (assignee == null) {
+                        assignee = resolveUserByName(taskData.getEmployeeName());
+                        if (assignee == null && autoCreateEmployees) {
+                            assignee = createEmployee(taskData.getEmployeeName(), taskData.getDepartment());
+                        }
+                        if (assignee != null) {
+                            userByName.put(nameKey, assignee);
+                        }
                     }
                     if (assignee != null) {
                         assigneeId = assignee.getId();
@@ -311,7 +318,7 @@ public class FileImportServiceImpl implements FileImportService {
                             .build();
 
                     // Create the task
-                    TaskResponse createdTask = taskService.createTask(request, userId);
+                    TaskResponse createdTask = taskService.createTask(request, userId, false);
                     importedTasks.add(createdTask);
                     successCount++;
                     log.info("Created task: {} for employee {}", taskData.getTitle(), taskData.getEmployeeName());
@@ -523,17 +530,29 @@ public class FileImportServiceImpl implements FileImportService {
         return saved;
     }
 
-    private UUID resolveImportTeamId(TaskImportData taskData, UUID fallbackTeamId, User importer) {
+    private UUID resolveImportTeamId(TaskImportData taskData, UUID fallbackTeamId, User importer,
+                                     Map<String, UUID> teamIdByDepartment) {
         String department = firstNonBlank(taskData.getDepartment(), taskData.getTeamName());
-        if (department != null) {
-            return teamService.getOrCreateDepartmentTeam(department, importer).getId();
+        String cacheKey = department == null ? "__fallback__" : DepartmentNames.canonical(department);
+        if (cacheKey == null || cacheKey.isBlank()) {
+            cacheKey = "__fallback__";
         }
-        if (fallbackTeamId != null) {
-            return teamRepository.findById(fallbackTeamId)
+        UUID cached = teamIdByDepartment.get(cacheKey);
+        if (cached != null) {
+            return cached;
+        }
+        UUID resolved;
+        if (department != null) {
+            resolved = teamService.getOrCreateDepartmentTeam(department, importer).getId();
+        } else if (fallbackTeamId != null) {
+            resolved = teamRepository.findById(fallbackTeamId)
                     .orElseGet(() -> teamService.getOrCreateDepartmentTeam("Engineering", importer))
                     .getId();
+        } else {
+            resolved = teamService.getOrCreateDepartmentTeam("Engineering", importer).getId();
         }
-        return teamService.getOrCreateDepartmentTeam("Engineering", importer).getId();
+        teamIdByDepartment.put(cacheKey, resolved);
+        return resolved;
     }
 
     private static String firstNonBlank(String a, String b) {

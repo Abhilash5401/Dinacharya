@@ -3,7 +3,13 @@ import { useAuthStore } from '@/store/authStore';
 
 // Use relative path for API when running in production (Nginx proxies /api/ to backend)
 // Use absolute URL for development
-const API_URL = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
+export const API_URL = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
+
+/** Browser → Render, skipping Cloudflare's 120s proxy read timeout on long imports. */
+export const IMPORT_API_URL = (
+  import.meta.env.VITE_DIRECT_API_URL ||
+  (API_URL.startsWith('http') ? API_URL : 'https://dinacharya-ese5.onrender.com/api/v1')
+).replace(/\/$/, '');
 
 export const apiClient = axios.create({
   baseURL: API_URL,
