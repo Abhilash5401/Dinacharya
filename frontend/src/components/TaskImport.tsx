@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { Upload, FileSpreadsheet, FileText, Download, AlertCircle, CheckCircle, X } from 'lucide-react';
 import { apiClient } from '@/api/client';
+import { useTeams } from '@/hooks/useTeams';
+import { Team } from '@/types';
 
 interface TaskImportResponse {
   totalRows: number;
@@ -19,6 +21,8 @@ interface TaskImportProps {
 
 const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
   const queryClient = useQueryClient();
+  const { data: teamsPage } = useTeams(0, 50);
+  const teams = teamsPage?.content || [];
   const [importing, setImporting] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [importResult, setImportResult] = useState<TaskImportResponse | null>(null);
@@ -49,10 +53,20 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       const formData = new FormData();
       formData.append('file', file);
 
-      const path = teamId
-        ? `/import/tasks/${endpoint}/${teamId}`
-        : `/import/tasks/${endpoint}`;
-      const response = await apiClient.post<TaskImportResponse>(path, formData);
+      let resolvedTeamId = teamId || teams[0]?.id;
+      if (!resolvedTeamId) {
+        const created = await apiClient.post<Team>('/teams', {
+          name: 'ASE',
+          description: 'Department: ASE',
+        });
+        resolvedTeamId = created.data.id;
+        await queryClient.invalidateQueries({ queryKey: ['teams'] });
+      }
+
+      const response = await apiClient.post<TaskImportResponse>(
+        `/import/tasks/${endpoint}/${resolvedTeamId}`,
+        formData
+      );
 
       const result = response.data;
       setImportResult(result);
@@ -67,7 +81,11 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
         totalRows: 0,
         successCount: 0,
         failureCount: 1,
-        errors: [error.response?.data?.message || 'Import failed: ' + error.message],
+        errors: [
+          error.response?.data?.detail ||
+            error.response?.data?.message ||
+            'Import failed: ' + error.message,
+        ],
         importedTasks: [],
         message: 'Import failed'
       });

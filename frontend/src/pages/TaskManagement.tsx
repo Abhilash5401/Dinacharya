@@ -368,7 +368,8 @@ export default function TaskManagement() {
                 </button>
               )}
             </div>
-            <TaskImport 
+            <TaskImport
+              teamId={selectedTeamId}
               onImportSuccess={(result) => {
                 toast.success(`Successfully imported ${result.successCount} task(s)!`);
                 if (result.failureCount > 0) {
