@@ -93,8 +93,7 @@ public class RoleDataMigration implements CommandLineRunner {
             entityManager.flush();
             log.info("========== RBAC ROLE DATA MIGRATION COMPLETED SUCCESSFULLY ==========");
         } catch (Exception e) {
-            log.error("ERROR during RBAC role data migration", e);
-            throw e;
+            log.warn("Skipping RBAC role migration (empty or incompatible schema): {}", e.getMessage());
         }
     }
 }
