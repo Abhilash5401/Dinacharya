@@ -7,16 +7,10 @@ export default {
     const url = new URL(request.url);
 
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) {
-      const origin = String(env.API_ORIGIN || '').replace(/\/$/, '');
-      if (!origin) {
-        return Response.json(
-          {
-            message:
-              'API_ORIGIN is not set. Cloudflare → dinacharya → Settings → Variables → API_ORIGIN = https://YOUR-SERVICE.onrender.com (no /api/v1).',
-          },
-          { status: 503, headers: { 'content-type': 'application/json' } }
-        );
-      }
+      const origin = String(env.API_ORIGIN || 'https://dinacharya-ese5.onrender.com').replace(
+        /\/$/,
+        ''
+      );
 
       const target = origin + url.pathname + url.search;
       const headers = new Headers(request.headers);

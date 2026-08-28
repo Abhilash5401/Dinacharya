@@ -340,9 +340,8 @@ export default function TaskManagement() {
           </div>
         </div>
 
-        {/* Task Import Section */}
-        {selectedTeamId && (
-          <section className="tms-panel">
+        {/* Task Import Section — always visible for admins; needs a team id */}
+        <section className="tms-panel">
             <div className="flex justify-between items-center mb-4">
               <h2 className="tms-panel-title">Import Tasks</h2>
               {isModerator && (
@@ -357,6 +356,7 @@ export default function TaskManagement() {
                 </button>
               )}
             </div>
+            {selectedTeamId ? (
             <TaskImport 
               teamId={selectedTeamId} 
               onImportSuccess={(result) => {
@@ -368,8 +368,13 @@ export default function TaskManagement() {
                 setTimeout(() => window.location.reload(), 1500);
               }}
             />
-          </section>
-        )}
+            ) : (
+              <p className="text-body-md text-charcoal-muted">
+                No team exists yet, so import is unavailable. Create a team on People, or restart
+                the API so the default &quot;Dinacharya&quot; team can be created.
+              </p>
+            )}
+        </section>
 
         <section id="new-task-form" className="tms-panel">
           <h2 className="tms-panel-title">Add New Task</h2>
