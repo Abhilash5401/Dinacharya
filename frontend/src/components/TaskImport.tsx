@@ -52,15 +52,7 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       const path = teamId
         ? `/import/tasks/${endpoint}/${teamId}`
         : `/import/tasks/${endpoint}`;
-      const response = await apiClient.post<TaskImportResponse>(
-        path,
-        formData,
-        {
-          headers: {
-            'Content-Type': 'multipart/form-data'
-          }
-        }
-      );
+      const response = await apiClient.post<TaskImportResponse>(path, formData);
 
       const result = response.data;
       setImportResult(result);
