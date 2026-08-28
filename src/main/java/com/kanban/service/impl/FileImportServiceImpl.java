@@ -19,6 +19,8 @@ import com.kanban.repository.UserRepository;
 import com.kanban.repository.TimeEntryRepository;
 import com.kanban.service.FileImportService;
 import com.kanban.service.TaskService;
+import com.kanban.service.TeamService;
+import com.kanban.util.DepartmentNames;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -50,6 +52,7 @@ import java.util.UUID;
 public class FileImportServiceImpl implements FileImportService {
 
     private final TaskService taskService;
+    private final TeamService teamService;
     private final TeamRepository teamRepository;
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -61,11 +64,6 @@ public class FileImportServiceImpl implements FileImportService {
     public TaskImportResponse importTasksFromExcel(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Excel import for team: {}", teamId);
 
-        // Verify team exists
-        teamRepository.findById(teamId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
-
-        // Read the file bytes once so we can attempt two parsing strategies.
         byte[] bytes = file.getBytes();
 
         // Auto-detect the multi-sheet attendance/timesheet layout first.
@@ -85,10 +83,6 @@ public class FileImportServiceImpl implements FileImportService {
     @Transactional
     public TaskImportResponse importTasksFromWord(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting Word import for team: {}", teamId);
-        
-        // Verify team exists
-        Team team = teamRepository.findById(teamId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
         List<TaskImportData> parsedTasks = parseWordFile(file);
         return processImportedTasks(parsedTasks, teamId, userId);
@@ -98,9 +92,6 @@ public class FileImportServiceImpl implements FileImportService {
     @Transactional
     public TaskImportResponse importAttendanceSheet(MultipartFile file, UUID teamId, UUID userId) throws IOException {
         log.info("Starting attendance tasksheet import for team: {}", teamId);
-
-        teamRepository.findById(teamId)
-                .orElseThrow(() -> new ResourceNotFoundException("Team not found"));
 
         List<TaskImportData> parsedTasks = parseAttendanceExcel(file);
         return processImportedTasks(parsedTasks, teamId, userId, true);
@@ -263,8 +254,12 @@ public class FileImportServiceImpl implements FileImportService {
         int successCount = 0;
         int failureCount = 0;
 
+        User importer = userRepository.findById(userId)
+                .orElseThrow(() -> new ResourceNotFoundException("User not found"));
+
         for (TaskImportData taskData : parsedTasks) {
             try {
+                UUID rowTeamId = resolveImportTeamId(taskData, teamId, importer);
                 // Find assignee: prefer email, then fall back to employee name (attendance sheets)
                 UUID assigneeId = null;
                 if (taskData.getAssigneeEmail() != null && !taskData.getAssigneeEmail().isEmpty()) {
@@ -312,7 +307,7 @@ public class FileImportServiceImpl implements FileImportService {
                             .priority(taskData.getPriority() != null ? taskData.getPriority() : TaskPriority.MEDIUM)
                             .deadline(taskData.getDueDate() != null ? taskData.getDueDate().atStartOfDay() : null)
                             .assignedToId(assigneeId)
-                            .teamId(teamId)
+                            .teamId(rowTeamId)
                             .build();
 
                     // Create the task
@@ -528,23 +523,32 @@ public class FileImportServiceImpl implements FileImportService {
         return saved;
     }
 
+    private UUID resolveImportTeamId(TaskImportData taskData, UUID fallbackTeamId, User importer) {
+        String department = firstNonBlank(taskData.getDepartment(), taskData.getTeamName());
+        if (department != null) {
+            return teamService.getOrCreateDepartmentTeam(department, importer).getId();
+        }
+        if (fallbackTeamId != null) {
+            return teamRepository.findById(fallbackTeamId)
+                    .orElseGet(() -> teamService.getOrCreateDepartmentTeam("Engineering", importer))
+                    .getId();
+        }
+        return teamService.getOrCreateDepartmentTeam("Engineering", importer).getId();
+    }
+
+    private static String firstNonBlank(String a, String b) {
+        if (a != null && !a.isBlank()) {
+            return a;
+        }
+        if (b != null && !b.isBlank()) {
+            return b;
+        }
+        return null;
+    }
+
     /** Returns the canonical department name for a raw value, or the original trimmed value if unknown. */
     private static String normaliseDepartment(String raw) {
-        if (raw == null || raw.isBlank()) return null;
-        Map<String, String> map = Map.ofEntries(
-            Map.entry("ase",                  "ASE"),
-            Map.entry("business development", "Business Development"),
-            Map.entry("cybersecurity",        "Cybersecurity"),
-            Map.entry("devops",               "DevOps"),
-            Map.entry("dev",                  "Dev"),
-            Map.entry("engineering",          "Engineering"),
-            Map.entry("ui",                   "UI"),
-            Map.entry("uiux",                 "UI"),
-            Map.entry("ui/ux",                "UI"),
-            Map.entry("ui ux",                "UI")
-        );
-        String canonical = map.get(raw.toLowerCase().trim());
-        return canonical != null ? canonical : raw.trim();
+        return DepartmentNames.canonical(raw);
     }
 
     /** Builds a unique, deterministic email from an employee name, e.g. "Akkipalli Sri Usha" -> akkipalli.sri.usha@imported.local */

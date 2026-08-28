@@ -186,10 +186,19 @@ export default function TaskManagement() {
   }, [assignableUsers, form.department]);
 
   useEffect(() => {
+    if (form.department && teams.length > 0) {
+      const match = teams.find(
+        (t) => t.name.toLowerCase() === form.department.toLowerCase()
+      );
+      if (match && form.teamId !== match.id) {
+        setForm((prev) => ({ ...prev, teamId: match.id }));
+      }
+      return;
+    }
     if (teams.length > 0 && !form.teamId) {
       setForm((prev) => ({ ...prev, teamId: teams[0].id }));
     }
-  }, [teams, form.teamId]);
+  }, [teams, form.teamId, form.department]);
 
   useEffect(() => {
     if (!(location.state as { openNewTask?: number } | null)?.openNewTask) return;
@@ -260,13 +269,16 @@ export default function TaskManagement() {
 
   const handleAddTask = async (e: React.FormEvent) => {
     e.preventDefault();
-    const teamId = form.teamId || teams[0]?.id;
+    const departmentTeam = form.department
+      ? teams.find((t) => t.name.toLowerCase() === form.department.toLowerCase())
+      : undefined;
+    const teamId = form.teamId || departmentTeam?.id || teams[0]?.id;
     if (!form.title.trim()) {
       toast.error('Task title is required');
       return;
     }
     if (!teamId) {
-      toast.error('Create a team first to add tasks');
+      toast.error('Select a department (each department is a team)');
       return;
     }
 
@@ -340,7 +352,7 @@ export default function TaskManagement() {
           </div>
         </div>
 
-        {/* Task Import Section — always visible for admins; needs a team id */}
+        {/* Task Import — rows go to the department team from the sheet (ASE, UI, …) */}
         <section className="tms-panel">
             <div className="flex justify-between items-center mb-4">
               <h2 className="tms-panel-title">Import Tasks</h2>
@@ -356,9 +368,7 @@ export default function TaskManagement() {
                 </button>
               )}
             </div>
-            {selectedTeamId ? (
             <TaskImport 
-              teamId={selectedTeamId} 
               onImportSuccess={(result) => {
                 toast.success(`Successfully imported ${result.successCount} task(s)!`);
                 if (result.failureCount > 0) {
@@ -368,12 +378,6 @@ export default function TaskManagement() {
                 setTimeout(() => window.location.reload(), 1500);
               }}
             />
-            ) : (
-              <p className="text-body-md text-charcoal-muted">
-                No team exists yet, so import is unavailable. Create a team on People, or restart
-                the API so the default &quot;Dinacharya&quot; team can be created.
-              </p>
-            )}
         </section>
 
         <section id="new-task-form" className="tms-panel">

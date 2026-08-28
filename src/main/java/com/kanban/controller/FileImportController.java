@@ -32,7 +32,7 @@ public class FileImportController {
     private final FileImportService fileImportService;
     private final com.kanban.security.CustomUserDetailsService userDetailsService;
 
-    @PostMapping(value = "/tasks/excel/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = {"/tasks/excel", "/tasks/excel/{teamId}"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from Excel file",
@@ -53,7 +53,7 @@ public class FileImportController {
             @Parameter(description = "Excel file containing tasks", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Team ID to import tasks to", required = true)
-            @PathVariable UUID teamId,
+            @PathVariable(required = false) UUID teamId,
             org.springframework.security.core.Authentication authentication) {
 
         log.info("Received Excel import request for team: {}, file: {}", teamId, file.getOriginalFilename());
@@ -101,7 +101,7 @@ public class FileImportController {
         }
     }
 
-    @PostMapping(value = "/tasks/attendance/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = {"/tasks/attendance", "/tasks/attendance/{teamId}"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from a daily attendance/tasksheet workbook",
@@ -123,7 +123,7 @@ public class FileImportController {
             @Parameter(description = "Attendance tasksheet Excel file", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Team ID to import tasks to", required = true)
-            @PathVariable UUID teamId,
+            @PathVariable(required = false) UUID teamId,
             org.springframework.security.core.Authentication authentication) {
 
         log.info("Received attendance import request for team: {}, file: {}", teamId, file.getOriginalFilename());
@@ -162,7 +162,7 @@ public class FileImportController {
         }
     }
 
-    @PostMapping(value = "/tasks/word/{teamId}", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    @PostMapping(value = {"/tasks/word", "/tasks/word/{teamId}"}, consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     @PreAuthorize("hasAnyRole('ADMIN')")
     @Operation(
             summary = "Import tasks from Word file",
@@ -184,7 +184,7 @@ public class FileImportController {
             @Parameter(description = "Word file containing tasks", required = true)
             @RequestParam("file") MultipartFile file,
             @Parameter(description = "Team ID to import tasks to", required = true)
-            @PathVariable UUID teamId,
+            @PathVariable(required = false) UUID teamId,
             org.springframework.security.core.Authentication authentication) {
 
         log.info("Received Word import request for team: {}, file: {}", teamId, file.getOriginalFilename());

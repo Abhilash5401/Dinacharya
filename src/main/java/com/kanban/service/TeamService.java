@@ -12,6 +12,7 @@ import com.kanban.model.entity.User;
 import com.kanban.model.enums.UserRole;
 import com.kanban.repository.TeamRepository;
 import com.kanban.repository.UserRepository;
+import com.kanban.util.DepartmentNames;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
@@ -208,6 +209,31 @@ public class TeamService {
             .build();
         team.getMembers().add(user);
         return teamRepository.save(team);
+    }
+
+    /**
+     * Each department is a team of the same name (ASE, DevOps, UI, …).
+     */
+    @Transactional
+    public Team getOrCreateDepartmentTeam(String departmentName, User lead) {
+        String name = DepartmentNames.canonical(departmentName);
+        if (name == null || name.isBlank()) {
+            name = "Engineering";
+        }
+        final String teamName = name;
+        return teamRepository.findByNameIgnoreCase(teamName).orElseGet(() -> {
+            Team team = Team.builder()
+                    .name(teamName)
+                    .description("Department: " + teamName)
+                    .lead(lead)
+                    .members(new HashSet<>())
+                    .tasks(new HashSet<>())
+                    .build();
+            if (lead != null) {
+                team.getMembers().add(lead);
+            }
+            return teamRepository.save(team);
+        });
     }
 
     public boolean isMember(Team team, User user) {

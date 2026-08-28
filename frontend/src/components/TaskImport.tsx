@@ -13,7 +13,7 @@ interface TaskImportResponse {
 }
 
 interface TaskImportProps {
-  teamId: string;
+  teamId?: string;
   onImportSuccess?: (result: TaskImportResponse) => void;
 }
 
@@ -49,8 +49,11 @@ const TaskImport: React.FC<TaskImportProps> = ({ teamId, onImportSuccess }) => {
       const formData = new FormData();
       formData.append('file', file);
 
+      const path = teamId
+        ? `/import/tasks/${endpoint}/${teamId}`
+        : `/import/tasks/${endpoint}`;
       const response = await apiClient.post<TaskImportResponse>(
-        `/import/tasks/${endpoint}/${teamId}`,
+        path,
         formData,
         {
           headers: {
