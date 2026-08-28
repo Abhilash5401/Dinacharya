@@ -3,7 +3,7 @@ import { useAuthStore } from '@/store/authStore';
 
 // Use relative path for API when running in production (Nginx proxies /api/ to backend)
 // Use absolute URL for development
-const API_URL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_URL = (import.meta.env.VITE_API_URL || '/api/v1').replace(/\/$/, '');
 
 export const apiClient = axios.create({
   baseURL: API_URL,
@@ -30,7 +30,14 @@ apiClient.interceptors.response.use(
   async (error: AxiosError) => {
     const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
 
-    if (error.response?.status === 401 && !originalRequest._retry) {
+    const requestUrl = originalRequest?.url || '';
+    const isAuthCall =
+      requestUrl.includes('/auth/login') ||
+      requestUrl.includes('/auth/register') ||
+      requestUrl.includes('/auth/refresh') ||
+      requestUrl.includes('/auth/forgot-password');
+
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthCall) {
       originalRequest._retry = true;
 
       try {

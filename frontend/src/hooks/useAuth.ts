@@ -7,12 +7,21 @@ import { AxiosError } from 'axios';
 
 function getApiErrorMessage(error: unknown, fallback: string) {
   if (error instanceof AxiosError) {
-    const detail = error.response?.data?.detail;
-    const message = error.response?.data?.message;
-    const errors = error.response?.data?.errors as Record<string, string> | undefined;
+    if (!error.response) {
+      return 'Cannot reach the API. On Cloudflare, set Worker variable API_ORIGIN to your Render URL (https://YOUR-SERVICE.onrender.com).';
+    }
+    const status = error.response.status;
+    if (status === 503) {
+      const message = error.response.data?.message;
+      if (typeof message === 'string' && message) return message;
+    }
+    const detail = error.response.data?.detail;
+    const message = error.response.data?.message;
+    const errors = error.response.data?.errors as Record<string, string> | undefined;
     if (typeof detail === 'string' && detail) return detail;
     if (typeof message === 'string' && message) return message;
     if (errors) return Object.values(errors).join(', ');
+    if (status === 401 || status === 403) return fallback;
   }
   return fallback;
 }
@@ -29,8 +38,8 @@ export const useLogin = () => {
       setAuth(data.accessToken, data.refreshToken, data.user);
       toast.success('Welcome back!');
     },
-    onError: () => {
-      toast.error('Invalid credentials');
+    onError: (error) => {
+      toast.error(getApiErrorMessage(error, 'Invalid credentials'));
     },
   });
 };
