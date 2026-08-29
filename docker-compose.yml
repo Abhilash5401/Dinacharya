@@ -86,7 +86,12 @@ services:
       # Application Configuration
       SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-prod}
       SERVER_PORT: 8080
-      
+
+      # Frontend origin. Must match the deployed site exactly (scheme + host,
+      # no trailing slash) or the browser blocks every API call with a CORS error.
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:5173}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:5173}
+
       # Admin Account Seeding
       ADMIN_ENABLED: ${ADMIN_ENABLED:-true}
       ADMIN_EMAIL: ${ADMIN_EMAIL:-admin@taskhub.com}
