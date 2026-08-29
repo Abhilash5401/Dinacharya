@@ -11,6 +11,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
 
 /**
  * One team per department so imports and tasks can use department as the workspace.
@@ -25,7 +26,13 @@ public class DefaultTeamSeeder implements CommandLineRunner {
     private final UserRepository userRepository;
     private final TeamService teamService;
 
+    /**
+     * Runs in a single transaction so the admin User stays attached to the
+     * persistence context. Team.members cascades PERSIST, so passing a detached
+     * User into a new Team throws "detached entity passed to persist".
+     */
     @Override
+    @Transactional
     public void run(String... args) {
         User lead = userRepository.findAllDistinct().stream()
                 .filter(u -> u.getRole() == UserRole.ADMIN)

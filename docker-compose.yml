@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   # MySQL Database
   mysql:
@@ -11,8 +9,6 @@ services:
       MYSQL_DATABASE: ${DB_NAME:-kanbandb}
       MYSQL_USER: ${DB_USER:-kanban}
       MYSQL_PASSWORD: ${DB_PASSWORD:-12345678}
-    ports:
-      - "127.0.0.1:3306:3306"  # Bind to localhost only for security
     volumes:
       - mysql_data:/var/lib/mysql
       - ./init-scripts:/docker-entrypoint-initdb.d
@@ -37,8 +33,6 @@ services:
     image: redis:7-alpine
     container_name: kanban-redis
     restart: unless-stopped
-    ports:
-      - "127.0.0.1:6379:6379"  # Bind to localhost only for security
     volumes:
       - redis_data:/data
     networks:

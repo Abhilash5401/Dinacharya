@@ -15,6 +15,9 @@ export const apiClient = axios.create({
   baseURL: API_URL,
   headers: {
     'Content-Type': 'application/json',
+    // Free-tier ngrok serves an HTML interstitial instead of proxying the
+    // request unless this header is present. Harmless on any other host.
+    'ngrok-skip-browser-warning': 'true',
   },
 });
 
@@ -55,9 +58,11 @@ apiClient.interceptors.response.use(
           throw new Error('No refresh token');
         }
 
-        const response = await axios.post(`${API_URL}/auth/refresh`, {
-          refreshToken,
-        });
+        const response = await axios.post(
+          `${API_URL}/auth/refresh`,
+          { refreshToken },
+          { headers: { 'ngrok-skip-browser-warning': 'true' } }
+        );
 
         const { accessToken, refreshToken: newRefreshToken } = response.data;
         
