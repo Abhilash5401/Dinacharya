@@ -73,7 +73,12 @@ public class SecurityConfig {
         patterns.add("http://localhost:*");
         configuration.setAllowedOriginPatterns(patterns);
         configuration.setAllowedMethods(Arrays.asList("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
-        configuration.setAllowedHeaders(Arrays.asList("Authorization", "Content-Type", "Accept"));
+        // "ngrok-skip-browser-warning" is needed when the API is served through a
+        // free ngrok tunnel; without it ngrok returns its interstitial HTML page
+        // instead of proxying. It is a custom header, so it must be allowed here
+        // or the browser's CORS preflight fails before the request is ever sent.
+        configuration.setAllowedHeaders(
+                Arrays.asList("Authorization", "Content-Type", "Accept", "ngrok-skip-browser-warning"));
         configuration.setExposedHeaders(List.of("Authorization"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
